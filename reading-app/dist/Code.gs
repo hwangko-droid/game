@@ -306,7 +306,7 @@ var SEED_CAREERS = ['의약·보건', '공학·IT', '자연과학', '교육', '�
 var SEED_SETTINGS = {
   '진로분야목록': SEED_CAREERS.join(','),
   '입장코드사용': 'TRUE',
-  '입장코드': '',            // setupSpreadsheet가 '호남'+4자리로 생성
+  '입장코드': '2027',        // 선생님이 정한 입장 비밀번호
   '감상최소글자': 300,
   '관리자이메일': '',        // setupSpreadsheet가 실행자 이메일로 채움
   '도서관링크': 'https://read365.edunet.net/PureScreen/SchoolSearch?schoolName=%ED%98%B8%EB%82%A8%EA%B3%A0%EB%93%B1%ED%95%99%EA%B5%90&provCode=P10&neisCode=P100000464',
@@ -376,7 +376,6 @@ function setupSpreadsheet_(adminEmail) {
   Object.keys(SEED_SETTINGS).forEach(function (k) {
     if (have[k]) return;
     var v = SEED_SETTINGS[k];
-    if (k === '입장코드') v = '호남' + String(1000 + Math.floor(Math.random() * 9000));
     if (k === '관리자이메일') v = adminEmail || '';
     sh.appendRow([k, v]);
   });

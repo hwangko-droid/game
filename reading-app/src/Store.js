@@ -32,7 +32,6 @@ function setupSpreadsheet_(adminEmail) {
   Object.keys(SEED_SETTINGS).forEach(function (k) {
     if (have[k]) return;
     var v = SEED_SETTINGS[k];
-    if (k === '입장코드') v = '호남' + String(1000 + Math.floor(Math.random() * 9000));
     if (k === '관리자이메일') v = adminEmail || '';
     sh.appendRow([k, v]);
   });

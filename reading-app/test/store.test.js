@@ -36,7 +36,7 @@ test('readSettings defaults', () => {
   assert.equal(s.minBodyChars, 300);
   assert.deepEqual(s.careers, plain(G.SEED_CAREERS));
   assert.deepEqual(s.adminEmails, ['t@ai.jbedu.kr']);
-  assert.match(s.entryCode, /^호남\d{4}$/);
+  assert.equal(s.entryCode, '2027');
   assert.match(s.libraryUrl, /^https:\/\/read365\.edunet\.net\/PureScreen\/SchoolSearch\?/);
   assert.equal(s.schoolYear, '2026');
 });
