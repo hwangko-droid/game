@@ -1,19 +1,21 @@
 /* Logic.js — 순수 함수 (시트·세션에 의존하지 않음) */
 
 var HEADERS = {
-  '학생': ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키'],
-  '도서': ['도서ID', '제목', '저자', '구분', '진로분야', '연결봉우리ID', '한줄소개', '출처'],
+  '학생': ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키', '독서량', '관심질문'],
+  '도서': ['도서ID', '제목', '저자', '구분', '진로분야', '연결봉우리ID', '한줄소개', '출처', '난이도', '질문'],
   '독후감': ['독후감ID', '학생ID', '도서ID', '감상', '추천대상', '추천이유', '질문', '작성일', '수정일', '숨김'],
   '댓글': ['댓글ID', '독후감ID', '학생ID', '내용', '작성일', '숨김'],
-  '설정': ['키', '값']
+  '설정': ['키', '값'],
+  '질문': ['질문ID', '질문']
 };
 
 // 탭별 [객체 키, 변환 종류]
 var FIELDS_ = {
-  '학생': [['sid', 's'], ['name', 's'], ['classNo', 'n'], ['number', 'n'], ['career', 's'], ['joinedAt', 's'], ['token', 's']],
-  '도서': [['id', 's'], ['title', 's'], ['author', 's'], ['kind', 's'], ['careers', 'list'], ['peakId', 's'], ['intro', 's'], ['source', 's']],
+  '학생': [['sid', 's'], ['name', 's'], ['classNo', 'n'], ['number', 'n'], ['career', 's'], ['joinedAt', 's'], ['token', 's'], ['level', 's'], ['questions', 'list']],
+  '도서': [['id', 's'], ['title', 's'], ['author', 's'], ['kind', 's'], ['careers', 'list'], ['peakId', 's'], ['intro', 's'], ['source', 's'], ['level', 's'], ['questions', 'list']],
   '독후감': [['id', 's'], ['sid', 's'], ['bookId', 's'], ['body', 's'], ['recTarget', 's'], ['recReason', 's'], ['question', 's'], ['createdAt', 's'], ['updatedAt', 's'], ['hidden', 'b']],
-  '댓글': [['id', 's'], ['essayId', 's'], ['sid', 's'], ['body', 's'], ['createdAt', 's'], ['hidden', 'b']]
+  '댓글': [['id', 's'], ['essayId', 's'], ['sid', 's'], ['body', 's'], ['createdAt', 's'], ['hidden', 'b']],
+  '질문': [['id', 's'], ['text', 's']]
 };
 
 function splitList_(v) {
@@ -214,6 +216,8 @@ function bookCards_(db, filter, viewer) {
   filter = filter || {};
   var c = ctx_(db, viewer);
   var q = squash_(filter.q);
+  var qText = {};
+  (db.questions || []).forEach(function (x) { qText[x.id] = x.text; });
   var cards = db.books.map(function (b) {
     var es = c.essays.filter(function (e) { return e.bookId === b.id; }).slice().sort(byNewest_);
     var readers = {}, byCareer = {};
@@ -228,7 +232,8 @@ function bookCards_(db, filter, viewer) {
     var bridges = db.books.filter(function (x) { return x.peakId === b.id; }).map(function (x) { return { id: x.id, title: x.title }; });
     return {
       id: b.id, title: b.title, author: b.author, kind: b.kind, careers: b.careers.slice(), peakId: b.peakId,
-      intro: b.intro, source: b.source,
+      intro: b.intro, source: b.source, level: b.level || '', questions: (b.questions || []).slice(),
+      questionTexts: (b.questions || []).map(function (q) { return qText[q]; }).filter(Boolean),
       readerCount: Object.keys(readers).length, readersByCareer: byCareer,
       topReason: es.length ? essayCard_(c, es[0]) : null, peak: peak, bridges: bridges
     };
@@ -288,4 +293,50 @@ function adminSummary_(db) {
   });
   return Object.keys(classes).map(Number).sort(function (a, b) { return a - b; })
     .map(function (k) { return { classNo: k, students: classes[k] }; });
+}
+
+/* ---------- 질문·독서량 · 나에게 맞는 책 ---------- */
+
+var LEVELS = ['가볍게', '보통', '깊게'];
+
+function validateInterests_(p, settings, questionIds) {
+  p = p || {};
+  if ((settings.careers || []).indexOf(p.career) < 0) return fail_('진로 분야를 목록에서 골라 주세요.');
+  if (LEVELS.indexOf(p.level) < 0) return fail_('독서량을 골라 주세요.');
+  var qs = [];
+  (Array.isArray(p.questions) ? p.questions : []).forEach(function (q) { if (qs.indexOf(q) < 0) qs.push(q); });
+  if (qs.length < 1 || qs.length > 3) return fail_('궁금한 질문을 1~3개 골라 주세요.');
+  if (qs.some(function (q) { return !questionIds.has(q); })) return fail_('목록에 있는 질문을 골라 주세요.');
+  return ok_({ career: p.career, level: p.level, questions: qs });
+}
+
+// 점수 = 질문 겹침×3 + 진로 일치×1 + 난이도(같으면 +1, 두 단계 차이면 −1). 질문·진로가 하나도 안 맞으면 제외.
+function recommendBooks_(db, me, viewer) {
+  var myQs = (me && me.questions) || [];
+  var qText = {};
+  (db.questions || []).forEach(function (x) { qText[x.id] = x.text; });
+  var read = {};
+  db.essays.forEach(function (e) { if (normId_(e.sid) === normId_(me.sid)) read[e.bookId] = true; });
+  var myLevel = LEVELS.indexOf(me.level);
+  var out = [];
+  bookCards_(db, {}, viewer).forEach(function (c) {
+    if (read[c.id]) return;
+    var hitQs = (c.questions || []).filter(function (q) { return myQs.indexOf(q) >= 0; });
+    var careerHit = c.careers.indexOf(me.career) >= 0;
+    if (!hitQs.length && !careerHit) return;
+    var bookLevel = LEVELS.indexOf(c.level);
+    var levelFit = myLevel >= 0 && bookLevel >= 0 && myLevel === bookLevel;
+    var levelFar = myLevel >= 0 && bookLevel >= 0 && Math.abs(myLevel - bookLevel) === 2;
+    c.match = {
+      score: hitQs.length * 3 + (careerHit ? 1 : 0) + (levelFit ? 1 : 0) - (levelFar ? 1 : 0),
+      questions: hitQs.map(function (q) { return qText[q]; }).filter(Boolean),
+      career: careerHit, levelFit: levelFit
+    };
+    out.push(c);
+  });
+  return out.sort(function (a, b) {
+    return b.match.score - a.match.score || (b.match.career ? 1 : 0) - (a.match.career ? 1 : 0) ||
+      b.readerCount - a.readerCount || kindRank_(a.kind) - kindRank_(b.kind) ||
+      String(a.title).localeCompare(String(b.title), 'ko');
+  }).slice(0, 6);
 }

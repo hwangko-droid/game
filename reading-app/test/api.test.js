@@ -138,12 +138,9 @@ test('student adds book and writes about it', () => {
   assert.equal(app.G.apiSubmitEssay(a, { ...essay, bookId: r.data.id }).ok, true);
 });
 
-test('career can change, name/class/number cannot', () => {
-  const app = boot();
-  const a = app.tok('가학생', 2, 3);
-  assert.equal(app.G.apiUpdateCareer(a, '교육').ok, true);
-  assert.equal(app.G.readAll_().students[0].career, '교육');
-  assert.equal(app.G.apiUpdateCareer(a, '우주').ok, false);
+test('old career api is gone', () => {
+  const { G } = boot();
+  assert.equal(typeof G.apiUpdateCareer, 'undefined');
 });
 
 test('writes take the lock and do not read sheets while holding it', () => {
@@ -180,4 +177,35 @@ test('doGet returns titled page with viewport', () => {
   const out = G.doGet();
   assert.equal(out.name, 'index');
   assert.equal(out.title, '우리 진로 책장');
+});
+
+test('profile update sets career, level, questions; bootstrap exposes them', () => {
+  const app = boot();
+  const a = app.tok('가학생', 2, 3);
+  let b = plain(app.G.apiBootstrap(a)).data;
+  assert.ok(b.questions.length >= 12);
+  assert.deepEqual(b.me.questions, []);
+  assert.equal(b.me.level, '');
+  const q = b.questions.slice(0, 2).map(x => x.id);
+  assert.equal(app.G.apiUpdateProfile(a, { career: '교육', level: '가볍게', questions: q }).ok, true);
+  b = plain(app.G.apiBootstrap(a)).data;
+  assert.deepEqual(b.me.questions, q);
+  assert.equal(b.me.level, '가볍게');
+  assert.equal(b.me.career, '교육');
+  assert.equal(app.G.apiUpdateProfile(a, { career: '교육', level: '가볍게', questions: [] }).ok, false);
+  assert.equal(app.G.apiUpdateProfile(app.admin, { career: '교육', level: '가볍게', questions: q }).ok, false);
+});
+
+test('recommend returns matched books with reasons', () => {
+  const app = boot();
+  const a = app.tok('가학생', 2, 3);
+  const qs = plain(app.G.apiBootstrap(a)).data.questions;
+  const q = qs.find(x => x.text.includes('공정')).id;
+  app.G.apiUpdateProfile(a, { career: '법·행정·정치', level: '보통', questions: [q] });
+  const r = plain(app.G.apiRecommend(a));
+  assert.equal(r.ok, true);
+  assert.ok(r.data.length >= 1 && r.data.length <= 6);
+  assert.equal(r.data[0].title, '정의란 무엇인가');
+  assert.ok(r.data[0].match.questions[0].includes('공정'));
+  assert.equal(app.G.apiRecommend('').ok, false);
 });

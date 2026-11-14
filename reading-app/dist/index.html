@@ -70,6 +70,10 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips label { display: inline-flex; gap: 4px; align-items: center; margin: 0; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); }
 .chips input { width: auto; }
+.qlist { display: grid; gap: 8px; }
+.qitem { display: flex; gap: 10px; align-items: center; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font-size: 15px; cursor: pointer; }
+.qitem input { width: auto; margin: 0; }
+.why { margin: 6px 0; font-size: 14px; color: var(--accent); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -139,8 +143,62 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
     call('apiBootstrap').then(function (b) {
       S.boot = b;
       if (b.state === 'login') return showLogin();
-      enterApp();
+      afterEnter('career');
     }).catch(function (e) { show(h('p', { class: 'empty', text: e.message })); });
+  }
+
+  // 학생인데 질문·독서량을 아직 안 골랐으면 먼저 고르게 한다
+  function afterEnter(tab) {
+    var me = S.boot.me;
+    if (S.boot.state === 'student' && me && (!me.level || !(me.questions || []).length)) return showInterests(false);
+    enterApp(tab);
+  }
+
+  var LEVELS = [['가볍게', '가볍게 — 쉽고 얇은 책부터'], ['보통', '보통 — 한 달에 한두 권쯤'], ['깊게', '깊게 — 두꺼운 책도 괜찮아요']];
+
+  function showInterests(isEdit) {
+    var me = S.boot.me || {};
+    var qs = S.boot.questions || [];
+    var err = h('div', { class: 'error' });
+    var career = careerSelect('interests-career', me.career, S.boot.careers || []);
+    var qBoxes = h('div', { class: 'qlist' }, qs.map(function (q) {
+      var box = h('input', { type: 'checkbox', name: 'q', value: q.id });
+      box.checked = (me.questions || []).indexOf(q.id) >= 0;
+      box.addEventListener('change', function () {
+        if (box.checked && qBoxes.querySelectorAll('input[name="q"]:checked').length > 3) {
+          box.checked = false; toast('질문은 3개까지 고를 수 있어요.');
+        }
+      });
+      return h('label', { class: 'qitem' }, box, h('span', { text: q.text }));
+    }));
+    var levels = h('div', { class: 'qlist' }, LEVELS.map(function (l) {
+      var r = h('input', { type: 'radio', name: 'level', value: l[0] });
+      r.checked = me.level === l[0];
+      return h('label', { class: 'qitem' }, r, h('span', { text: l[1] }));
+    }));
+    var btn = h('button', { class: 'btn', id: 'interests-save', text: isEdit ? '저장' : '책 고르러 가기' });
+    btn.onclick = function () {
+      err.textContent = '';
+      var picked = Array.prototype.map.call(qBoxes.querySelectorAll('input[name="q"]:checked'), function (i) { return i.value; });
+      var lv = levels.querySelector('input[name="level"]:checked');
+      if (picked.length < 1) { err.textContent = '궁금한 질문을 1~3개 골라 주세요.'; return; }
+      if (!lv) { err.textContent = '독서량을 골라 주세요.'; return; }
+      btn.disabled = true;
+      var p = { career: career.value, level: lv.value, questions: picked };
+      call('apiUpdateProfile', p).then(function () {
+        me.career = p.career; me.level = p.level; me.questions = p.questions;
+        S.career = null;
+        enterApp(isEdit ? 'mine' : 'career');
+      }).catch(function (e) { err.textContent = e.message; btn.disabled = false; });
+    };
+    show(h('div', { id: 'interests', class: 'center', style: 'text-align:left' },
+      h('h2', { text: isEdit ? '내 진로·질문·독서량' : '나를 알려 주세요' }),
+      h('p', { class: 'meta', text: '고른 것에 맞춰 책을 골라 드려요. 언제든 \'내 기록\'에서 바꿀 수 있어요.' }),
+      h('label', { for: 'interests-career', text: '진로 분야' }), career,
+      h('h3', { text: '요즘 궁금한 질문 (1~3개)' }), qBoxes,
+      h('h3', { text: '나의 독서량' }), levels,
+      err, btn,
+      isEdit ? h('button', { class: 'btn ghost', style: 'margin-left:8px', onclick: function () { enterApp('mine'); }, text: '취소' }) : null));
   }
 
   function leave() {
@@ -162,7 +220,7 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
       call('apiLogin', code.value, p).then(function (r) {
         S.token = r.token; saveToken(r.token);
         return call('apiBootstrap');
-      }).then(function (b) { S.boot = b; enterApp('career'); })
+      }).then(function (b) { S.boot = b; afterEnter('career'); })
         .catch(function (e) { err.textContent = e.message; btn.disabled = false; });
     }
     btn.onclick = submit;
@@ -246,7 +304,9 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
     var readers = Object.keys(b.readersByCareer).map(function (k) { return k + ' ' + b.readersByCareer[k]; }).join(' · ');
     return h('div', { class: 'card book-card' },
       h('div', null, h('span', { class: 'badge ' + b.kind, text: b.kind }), h('span', { class: 'book-title', text: b.title })),
-      h('div', { class: 'meta', text: b.author + (b.source ? ' · ' + b.source : '') }),
+      h('div', { class: 'meta', text: b.author + (b.source ? ' · ' + b.source : '') + (b.level ? ' · 난이도 ' + b.level : '') }),
+      b.match ? h('div', { class: 'why', text: '💡 ' + [b.match.questions.join(' · '), b.match.career ? '내 진로' : '', b.match.levelFit ? '내 독서량에 딱 맞음' : ''].filter(Boolean).join(' · ') }) : null,
+      !b.match && (b.questionTexts || []).length ? h('div', { class: 'meta', text: '❓ ' + b.questionTexts.join(' · ') }) : null,
       b.intro ? h('p', { text: b.intro }) : null,
       h('div', { class: 'meta', text: b.readerCount ? '친구 ' + b.readerCount + '명이 읽음 (' + readers + ')' : '아직 읽은 친구가 없어요' }),
       b.topReason ? h('div', { class: 'question', style: 'cursor:pointer', onclick: function () { viewDetail(b.topReason.id); } },
@@ -279,8 +339,15 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
     sel.onchange = refresh;
     var timer;
     q.oninput = function () { clearTimeout(timer); timer = setTimeout(refresh, 300); };
-    show([h('h2', { text: '책 찾기' }), h('div', { class: 'inline' }, sel, q), h('div', { style: 'height:12px' }), list, addBookForm(careers)]);
+    var rec = h('div', { id: 'recommend' });
+    show([rec, h('h2', { text: '책 찾기' }), h('div', { class: 'inline' }, sel, q), h('div', { style: 'height:12px' }), list, addBookForm(careers)]);
     refresh();
+    if (S.boot.me) {
+      call('apiRecommend').then(function (cards) {
+        if (!cards.length) return;
+        add(rec, [h('h2', { text: '나에게 맞는 책' }), h('p', { class: 'meta', text: '내가 고른 질문·진로·독서량에 맞춘 추천이에요.' }), cards.map(bookCard), h('div', { style: 'height:8px' })]);
+      }).catch(function () {});
+    }
   }
 
   function addBookForm(careers) {
@@ -412,14 +479,12 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
       var me = S.boot.me;
       show([
         h('h2', { text: '내 기록' }),
-        me ? h('div', { class: 'card' }, h('b', { text: me.name }), ' ', h('span', { class: 'meta', text: me.classNo + '반 ' + me.number + '번' }),
-          h('label', { for: 'mine-career', text: '내 진로 분야' }),
-          h('div', { class: 'inline' }, careerSelect('mine-career', me.career, S.boot.careers || []),
-            h('button', { class: 'btn small', id: 'mine-career-save', text: '바꾸기', onclick: function () {
-              var c = $('mine-career').value;
-              call('apiUpdateCareer', c).then(function () { me.career = c; S.career = null; toast('진로 분야를 바꿨어요.'); })
-                .catch(function (e) { toast(e.message); });
-            } })),
+        me ? h('div', { class: 'card' }, h('b', { text: me.name }), ' ', h('span', { class: 'meta', text: me.classNo + '반 ' + me.number + '번 · ' + me.career + ' · 독서량 ' + (me.level || '-') }),
+          (me.questions || []).map(function (id) {
+            var q = (S.boot.questions || []).filter(function (x) { return x.id === id; })[0];
+            return q ? h('div', { class: 'meta', text: '❓ ' + q.text }) : null;
+          }),
+          h('div', { style: 'margin-top:8px' }, h('button', { class: 'btn ghost small', text: '내 진로·질문·독서량 바꾸기', onclick: function () { showInterests(true); } })),
           h('p', { class: 'meta', text: '이름·반·번호가 틀렸으면 선생님께 말씀해 주세요.' })) : null,
         h('h3', { text: '내가 쓴 독후감 ' + r.essays.length + '편' }),
         r.essays.length ? r.essays.map(essayCard) : h('p', { class: 'empty', text: '아직 쓴 독후감이 없어요.' }),

@@ -1,6 +1,6 @@
 /* Store.js — 구글 시트 읽기/쓰기 */
 
-var TABS_ = ['학생', '도서', '독후감', '댓글', '설정'];
+var TABS_ = ['학생', '도서', '독후감', '댓글', '설정', '질문'];
 
 function getSs_() { return SpreadsheetApp.getActiveSpreadsheet(); }
 
@@ -24,6 +24,7 @@ function setupSpreadsheet_() {
       sh.appendRow(HEADERS[tab]);
       if (sh.setFrozenRows) sh.setFrozenRows(1);
       if (tab === '도서') SEED_BOOKS.forEach(function (b) { sh.appendRow(objectToRow_('도서', b)); });
+      if (tab === '질문') SEED_QUESTIONS.forEach(function (q) { sh.appendRow(objectToRow_('질문', q)); });
     }
   });
   var sh = ss.getSheetByName('설정');
@@ -58,7 +59,7 @@ function readSettings_() {
 
 function readAll_() {
   function read(tab) { return dataRows_(tab).map(function (r) { return rowToObject_(tab, r); }); }
-  return { students: read('학생'), books: read('도서'), essays: read('독후감'), comments: read('댓글') };
+  return { students: read('학생'), books: read('도서'), essays: read('독후감'), comments: read('댓글'), questions: read('질문') };
 }
 
 function appendRow_(tab, obj) {

@@ -60,12 +60,12 @@ function bookIdSet_(db) {
 }
 // 접속키를 뺀 학생 정보
 function publicStudent_(s) {
-  return s ? { sid: s.sid, name: s.name, classNo: s.classNo, number: s.number, career: s.career } : null;
+  return s ? { sid: s.sid, name: s.name, classNo: s.classNo, number: s.number, career: s.career, level: s.level || '', questions: (s.questions || []).slice() } : null;
 }
 
 function apiBootstrap(token) {
   return run_(token, 'any', function (u) {
-    var out = { state: u.state, isAdmin: u.isAdmin, careers: u.settings.careers };
+    var out = { state: u.state, isAdmin: u.isAdmin, careers: u.settings.careers, questions: u.db.questions };
     if (u.state === 'student' || u.state === 'admin') {
       out.me = publicStudent_(u.student);
       out.libraryUrl = u.settings.libraryUrl;
@@ -101,13 +101,24 @@ function apiLogin(code, profile) {
   }, true);
 }
 
-function apiUpdateCareer(token, career) {
+// 진로·독서량·궁금한 질문(1~3개) 바꾸기
+function apiUpdateProfile(token, p) {
   return run_(token, 'member', function (u) {
-    if (!u.student) return fail_('학생만 진로를 바꿀 수 있어요.');
-    if ((u.settings.careers || []).indexOf(career) < 0) return fail_('진로 분야를 목록에서 골라 주세요.');
-    updateRowById_('학생', u.sid, { career: career });
-    return { career: career };
+    if (!u.student) return fail_('학생만 바꿀 수 있어요.');
+    var ids = new Set();
+    u.db.questions.forEach(function (q) { ids.add(q.id); });
+    var v = validateInterests_(p, u.settings, ids);
+    if (!v.ok) return v;
+    updateRowById_('학생', u.sid, v.data);
+    return v.data;
   }, true);
+}
+
+function apiRecommend(token) {
+  return run_(token, 'member', function (u) {
+    if (!u.student) return [];
+    return recommendBooks_(u.db, u.student, viewer_(u));
+  });
 }
 
 function apiCareerView(token, career) {

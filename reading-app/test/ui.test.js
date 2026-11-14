@@ -15,18 +15,20 @@ function installFake(scenario) {
   window.__calls = [];
   window.__opened = [];
   window.open = (u) => { window.__opened.push(u); return null; };
-  const me = { name: '가학생', classNo: 2, number: 3, career: '의약·보건' };
+  const me = { sid: '2-03', name: '가학생', classNo: 2, number: 3, career: '의약·보건', level: st.fresh ? '' : '보통', questions: st.fresh ? [] : ['Q01'] };
+  const QS = [{ id: 'Q01', text: '아픈 건 몸 탓일까, 사회 탓일까?' }, { id: 'Q02', text: '기계도 생각할 수 있을까?' }, { id: 'Q03', text: '공정하다는 건 뭘까?' }, { id: 'Q04', text: '나는 왜 이런 사람일까?' }];
   const card = { id: 'E1', bookId: 'B03', bookTitle: '아픔이 길이 되려면', authorName: '가학생', authorClass: 2, career: '의약·보건',
     recTarget: '의사 꿈꾸는', recReason: st.reason || '병의 사회적 원인', question: '고칠 수 있을까?', createdAt: '2026-11-14T00:00:00Z', commentCount: 0, hidden: false };
   const book = { id: 'B03', title: st.bookTitle || '아픔이 길이 되려면', author: '김승섭', kind: '징검다리', careers: ['의약·보건'], peakId: 'P03', intro: '', source: '',
-    readerCount: 1, readersByCareer: { '의약·보건': 1 }, topReason: card, peak: { id: 'P03', title: '침묵의 봄' }, bridges: [] };
+    readerCount: 1, readersByCareer: { '의약·보건': 1 }, topReason: card, peak: { id: 'P03', title: '침묵의 봄' }, bridges: [], level: '보통', questionTexts: ['아픈 건 몸 탓일까, 사회 탓일까?'] };
   const isTok = (t) => t === 'TOK' || t === 'ADMIN';
   const api = {
-    apiBootstrap: (t) => ({ ok: true, data: !isTok(t) ? { state: 'login', isAdmin: false, careers: ['의약·보건', '교육'] }
-      : { state: t === 'ADMIN' ? 'admin' : 'student', isAdmin: t === 'ADMIN', careers: ['의약·보건', '교육'], me: t === 'ADMIN' ? null : me, libraryUrl: st.lib, minBodyChars: 300 } }),
+    apiBootstrap: (t) => ({ ok: true, data: !isTok(t) ? { state: 'login', isAdmin: false, careers: ['의약·보건', '교육'], questions: QS }
+      : { state: t === 'ADMIN' ? 'admin' : 'student', isAdmin: t === 'ADMIN', careers: ['의약·보건', '교육'], questions: QS, me: t === 'ADMIN' ? null : me, libraryUrl: st.lib, minBodyChars: 300 } }),
     apiLogin: (code, p) => code === '관리1234' ? { ok: true, data: { token: 'ADMIN', admin: true } }
       : code !== '2027' ? { ok: false, error: '비밀번호가 맞지 않아요.' } : { ok: true, data: { token: 'TOK' } },
-    apiUpdateCareer: (t, c) => ({ ok: true, data: { career: c } }),
+    apiUpdateProfile: (t, p) => { Object.assign(me, p); return { ok: true, data: p }; },
+    apiRecommend: () => ({ ok: true, data: [{ ...book, match: { score: 4, questions: ['아픈 건 몸 탓일까, 사회 탓일까?'], career: true, levelFit: true } }] }),
     apiAdminSummary: () => ({ ok: true, data: [] }),
     apiCareerView: (t, c) => ({ ok: true, data: { career: c, friends: [{ name: '가학생', classNo: 2, bookTitles: ['아픔이 길이 되려면'] }], recentEssays: [card] } }),
     apiBookCards: () => ({ ok: true, data: [book] }),
@@ -181,13 +183,51 @@ test('Hangul IME Enter and double click post one comment', async () => {
   await p.close();
 });
 
-test('only career can be changed from 내 기록', async () => {
+test('first visit asks questions (max 3) and reading level', async () => {
+  const p = await open({ token: 'TOK', fresh: true });
+  await p.locator('#interests').waitFor();
+  const boxes = p.locator('#interests input[name="q"]');
+  for (let i = 0; i < 4; i++) await boxes.nth(i).check({ force: true }).catch(() => {});
+  assert.equal(await p.locator('#interests input[name="q"]:checked').count(), 3);
+  await p.click('#interests-save');
+  await p.getByText('독서량을 골라 주세요').waitFor();
+  await p.check('#interests input[name="level"][value="가볍게"]');
+  await p.click('#interests-save');
+  await p.locator('nav button[data-tab="career"].active').waitFor();
+  const c = await p.evaluate(() => window.__calls.find(x => x[0] === 'apiUpdateProfile'));
+  assert.equal(c[1][0], 'TOK');
+  assert.deepEqual(c[1][1], { career: '의약·보건', level: '가볍게', questions: ['Q01', 'Q02', 'Q03'] });
+  await p.close();
+});
+
+test('student with interests skips the question screen', async () => {
+  const p = await open({ token: 'TOK' });
+  await p.locator('nav button[data-tab="career"].active').waitFor();
+  assert.equal(await p.locator('#interests').count(), 0);
+  await p.close();
+});
+
+test('book search shows my recommendations with the reason', async () => {
+  const p = await open({ token: 'TOK' });
+  await p.click('nav button[data-tab="books"]');
+  await p.getByText('나에게 맞는 책').waitFor();
+  await p.locator('#recommend .book-card').first().waitFor();
+  const t = await p.textContent('#recommend');
+  assert.match(t, /아픈 건 몸 탓일까, 사회 탓일까\?/);
+  assert.match(t, /보통/);
+  await p.close();
+});
+
+test('내 기록 lets student change career, questions, level', async () => {
   const p = await open({ token: 'TOK' });
   await p.click('nav button[data-tab="mine"]');
-  await p.selectOption('#mine-career', '교육');
-  await p.click('#mine-career-save');
-  await p.waitForTimeout(50);
-  const c = await p.evaluate(() => window.__calls.find(x => x[0] === 'apiUpdateCareer'));
-  assert.deepEqual(c[1], ['TOK', '교육']);
+  await p.getByText('내 진로·질문·독서량 바꾸기').click();
+  await p.locator('#interests').waitFor();
+  assert.equal(await p.locator('#interests input[name="q"]:checked').count(), 1);
+  await p.selectOption('#interests-career', '교육');
+  await p.click('#interests-save');
+  await p.waitForTimeout(100);
+  const c = await p.evaluate(() => window.__calls.find(x => x[0] === 'apiUpdateProfile'));
+  assert.deepEqual(c[1][1], { career: '교육', level: '보통', questions: ['Q01'] });
   await p.close();
 });

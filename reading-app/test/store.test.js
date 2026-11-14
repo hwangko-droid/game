@@ -12,7 +12,7 @@ function setup() {
 test('setupSpreadsheet creates tabs with headers and seed books', () => {
   const { G, ss } = setup();
   G.setupSpreadsheet_();
-  for (const tab of ['학생', '도서', '독후감', '댓글', '설정']) {
+  for (const tab of ['학생', '도서', '독후감', '댓글', '설정', '질문']) {
     assert.deepEqual(plain(ss._sheets[tab][0]), plain(G.HEADERS[tab]), tab);
   }
   assert.equal(ss._sheets['도서'].length, 1 + G.SEED_BOOKS.length);
@@ -91,4 +91,19 @@ test('entry code setting fails closed', () => {
     row[1] = v;
     assert.equal(G.readSettings_().entryCodeOn, want, JSON.stringify(v));
   }
+});
+
+test('seed questions linked to books, every book has a level', () => {
+  const { G } = setup();
+  G.setupSpreadsheet_();
+  const qs = G.readAll_().questions;
+  assert.equal(qs.length, G.SEED_QUESTIONS.length);
+  assert.ok(qs.length >= 12);
+  const ids = new Set(qs.map(q => q.id));
+  for (const b of G.readAll_().books) {
+    assert.ok(['가볍게', '보통', '깊게'].includes(b.level), b.title);
+    assert.ok(b.questions.length >= 1, b.title);
+    for (const q of b.questions) assert.ok(ids.has(q), `${b.title}: ${q}`);
+  }
+  for (const q of qs) assert.ok(G.readAll_().books.some(b => b.questions.includes(q.id)), q.text);
 });

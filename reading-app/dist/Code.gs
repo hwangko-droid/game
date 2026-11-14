@@ -4,19 +4,21 @@
 /* Logic.js — 순수 함수 (시트·세션에 의존하지 않음) */
 
 var HEADERS = {
-  '학생': ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키'],
-  '도서': ['도서ID', '제목', '저자', '구분', '진로분야', '연결봉우리ID', '한줄소개', '출처'],
+  '학생': ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키', '독서량', '관심질문'],
+  '도서': ['도서ID', '제목', '저자', '구분', '진로분야', '연결봉우리ID', '한줄소개', '출처', '난이도', '질문'],
   '독후감': ['독후감ID', '학생ID', '도서ID', '감상', '추천대상', '추천이유', '질문', '작성일', '수정일', '숨김'],
   '댓글': ['댓글ID', '독후감ID', '학생ID', '내용', '작성일', '숨김'],
-  '설정': ['키', '값']
+  '설정': ['키', '값'],
+  '질문': ['질문ID', '질문']
 };
 
 // 탭별 [객체 키, 변환 종류]
 var FIELDS_ = {
-  '학생': [['sid', 's'], ['name', 's'], ['classNo', 'n'], ['number', 'n'], ['career', 's'], ['joinedAt', 's'], ['token', 's']],
-  '도서': [['id', 's'], ['title', 's'], ['author', 's'], ['kind', 's'], ['careers', 'list'], ['peakId', 's'], ['intro', 's'], ['source', 's']],
+  '학생': [['sid', 's'], ['name', 's'], ['classNo', 'n'], ['number', 'n'], ['career', 's'], ['joinedAt', 's'], ['token', 's'], ['level', 's'], ['questions', 'list']],
+  '도서': [['id', 's'], ['title', 's'], ['author', 's'], ['kind', 's'], ['careers', 'list'], ['peakId', 's'], ['intro', 's'], ['source', 's'], ['level', 's'], ['questions', 'list']],
   '독후감': [['id', 's'], ['sid', 's'], ['bookId', 's'], ['body', 's'], ['recTarget', 's'], ['recReason', 's'], ['question', 's'], ['createdAt', 's'], ['updatedAt', 's'], ['hidden', 'b']],
-  '댓글': [['id', 's'], ['essayId', 's'], ['sid', 's'], ['body', 's'], ['createdAt', 's'], ['hidden', 'b']]
+  '댓글': [['id', 's'], ['essayId', 's'], ['sid', 's'], ['body', 's'], ['createdAt', 's'], ['hidden', 'b']],
+  '질문': [['id', 's'], ['text', 's']]
 };
 
 function splitList_(v) {
@@ -217,6 +219,8 @@ function bookCards_(db, filter, viewer) {
   filter = filter || {};
   var c = ctx_(db, viewer);
   var q = squash_(filter.q);
+  var qText = {};
+  (db.questions || []).forEach(function (x) { qText[x.id] = x.text; });
   var cards = db.books.map(function (b) {
     var es = c.essays.filter(function (e) { return e.bookId === b.id; }).slice().sort(byNewest_);
     var readers = {}, byCareer = {};
@@ -231,7 +235,8 @@ function bookCards_(db, filter, viewer) {
     var bridges = db.books.filter(function (x) { return x.peakId === b.id; }).map(function (x) { return { id: x.id, title: x.title }; });
     return {
       id: b.id, title: b.title, author: b.author, kind: b.kind, careers: b.careers.slice(), peakId: b.peakId,
-      intro: b.intro, source: b.source,
+      intro: b.intro, source: b.source, level: b.level || '', questions: (b.questions || []).slice(),
+      questionTexts: (b.questions || []).map(function (q) { return qText[q]; }).filter(Boolean),
       readerCount: Object.keys(readers).length, readersByCareer: byCareer,
       topReason: es.length ? essayCard_(c, es[0]) : null, peak: peak, bridges: bridges
     };
@@ -293,6 +298,52 @@ function adminSummary_(db) {
     .map(function (k) { return { classNo: k, students: classes[k] }; });
 }
 
+/* ---------- 질문·독서량 · 나에게 맞는 책 ---------- */
+
+var LEVELS = ['가볍게', '보통', '깊게'];
+
+function validateInterests_(p, settings, questionIds) {
+  p = p || {};
+  if ((settings.careers || []).indexOf(p.career) < 0) return fail_('진로 분야를 목록에서 골라 주세요.');
+  if (LEVELS.indexOf(p.level) < 0) return fail_('독서량을 골라 주세요.');
+  var qs = [];
+  (Array.isArray(p.questions) ? p.questions : []).forEach(function (q) { if (qs.indexOf(q) < 0) qs.push(q); });
+  if (qs.length < 1 || qs.length > 3) return fail_('궁금한 질문을 1~3개 골라 주세요.');
+  if (qs.some(function (q) { return !questionIds.has(q); })) return fail_('목록에 있는 질문을 골라 주세요.');
+  return ok_({ career: p.career, level: p.level, questions: qs });
+}
+
+// 점수 = 질문 겹침×3 + 진로 일치×1 + 난이도(같으면 +1, 두 단계 차이면 −1). 질문·진로가 하나도 안 맞으면 제외.
+function recommendBooks_(db, me, viewer) {
+  var myQs = (me && me.questions) || [];
+  var qText = {};
+  (db.questions || []).forEach(function (x) { qText[x.id] = x.text; });
+  var read = {};
+  db.essays.forEach(function (e) { if (normId_(e.sid) === normId_(me.sid)) read[e.bookId] = true; });
+  var myLevel = LEVELS.indexOf(me.level);
+  var out = [];
+  bookCards_(db, {}, viewer).forEach(function (c) {
+    if (read[c.id]) return;
+    var hitQs = (c.questions || []).filter(function (q) { return myQs.indexOf(q) >= 0; });
+    var careerHit = c.careers.indexOf(me.career) >= 0;
+    if (!hitQs.length && !careerHit) return;
+    var bookLevel = LEVELS.indexOf(c.level);
+    var levelFit = myLevel >= 0 && bookLevel >= 0 && myLevel === bookLevel;
+    var levelFar = myLevel >= 0 && bookLevel >= 0 && Math.abs(myLevel - bookLevel) === 2;
+    c.match = {
+      score: hitQs.length * 3 + (careerHit ? 1 : 0) + (levelFit ? 1 : 0) - (levelFar ? 1 : 0),
+      questions: hitQs.map(function (q) { return qText[q]; }).filter(Boolean),
+      career: careerHit, levelFit: levelFit
+    };
+    out.push(c);
+  });
+  return out.sort(function (a, b) {
+    return b.match.score - a.match.score || (b.match.career ? 1 : 0) - (a.match.career ? 1 : 0) ||
+      b.readerCount - a.readerCount || kindRank_(a.kind) - kindRank_(b.kind) ||
+      String(a.title).localeCompare(String(b.title), 'ko');
+  }).slice(0, 6);
+}
+
 // ===== Seed.js =====
 /* Seed.js — 처음 한 번 시트에 넣는 기본값. 이후에는 시트에서 직접 고친다. */
 
@@ -308,38 +359,56 @@ var SEED_SETTINGS = {
   '학년도': '2026'
 };
 
+// 학생이 고르는 '요즘 궁금한 질문' 예시 (선생님이 '질문' 탭에서 고치고 더할 수 있다)
+var SEED_QUESTIONS = [
+  ['Q01', '아픈 건 몸 탓일까, 사회 탓일까?'],
+  ['Q02', '죽음 앞에서 삶은 어떤 의미일까?'],
+  ['Q03', '기계도 생각할 수 있을까?'],
+  ['Q04', '우주에서 나는 어떤 존재일까?'],
+  ['Q05', '과학의 정답은 어떻게 바뀌어 왔을까?'],
+  ['Q06', '공정하다는 건 뭘까?'],
+  ['Q07', '권력은 어떻게 움직일까?'],
+  ['Q08', '돈과 시장은 어떻게 돌아갈까?'],
+  ['Q09', '나는 왜 이런 사람일까?'],
+  ['Q10', '수학은 세상을 어떻게 설명할까?'],
+  ['Q11', '좋은 배움이란 무엇일까?'],
+  ['Q12', '모두가 행복한 사회는 가능할까?'],
+  ['Q13', '자연과 인간은 어떻게 함께 살까?'],
+  ['Q14', '낯선 세상을 직접 보면 무엇이 달라질까?']
+].map(function (r) { return { id: r[0], text: r[1] }; });
+
 // 한줄소개는 선생님이 채운다. '서울대 권장도서 100선' 표기는 선생님 확인 필요 (DEPLOY.md).
 var SEED_BOOKS = [
-  ['P01', '봉우리', '코스모스', '칼 세이건', '자연과학,공학·IT', '', '서울대 권장도서 100선'],
-  ['P02', '봉우리', '부분과 전체', '베르너 하이젠베르크', '자연과학', '', '서울대 권장도서 100선'],
-  ['P03', '봉우리', '침묵의 봄', '레이첼 카슨', '자연과학,의약·보건', '', '서울대 권장도서 100선'],
-  ['P04', '봉우리', '과학혁명의 구조', '토머스 쿤', '자연과학,인문·언어', '', '서울대 권장도서 100선'],
-  ['P05', '봉우리', '군주론', '니콜로 마키아벨리', '법·행정·정치', '', '서울대 권장도서 100선'],
-  ['P06', '봉우리', '국부론', '애덤 스미스', '경영·경제', '', '서울대 권장도서 100선'],
-  ['P07', '봉우리', '광장', '최인훈', '인문·언어,사회·심리', '', '서울대 권장도서 100선'],
-  ['P08', '봉우리', '난장이가 쏘아올린 작은 공', '조세희', '사회·심리,인문·언어', '', '서울대 권장도서 100선'],
-  ['P09', '봉우리', '열하일기', '박지원', '인문·언어,교육', '', '서울대 권장도서 100선'],
-  ['B01', '징검다리', '과학콘서트', '정재승', '자연과학,공학·IT', 'P01', ''],
-  ['B02', '징검다리', '랩 걸', '호프 자런', '자연과학', 'P03', ''],
-  ['B03', '징검다리', '아픔이 길이 되려면', '김승섭', '의약·보건,사회·심리', 'P03', ''],
-  ['B04', '징검다리', '숨결이 바람 될 때', '폴 칼라니티', '의약·보건', '', ''],
-  ['B05', '징검다리', '수학이 필요한 순간', '김민형', '공학·IT,자연과학', 'P02', ''],
-  ['B06', '징검다리', '코드', '찰스 펫졸드', '공학·IT', '', ''],
-  ['B07', '징검다리', '정의란 무엇인가', '마이클 샌델', '법·행정·정치,교육', 'P05', ''],
-  ['B08', '징검다리', '선량한 차별주의자', '김지혜', '사회·심리,법·행정·정치,교육', 'P08', ''],
-  ['B09', '징검다리', '죽은 경제학자의 살아있는 아이디어', '토드 부크홀츠', '경영·경제', 'P06', ''],
-  ['B10', '징검다리', '사피엔스', '유발 하라리', '인문·언어,사회·심리,아직 모르겠음', 'P04', ''],
-  ['B11', '징검다리', '미움받을 용기', '기시미 이치로, 고가 후미타케', '사회·심리,교육,아직 모르겠음', '', ''],
-  ['B12', '징검다리', '죽은 시인의 사회', 'N. H. 클라인바움', '교육,미디어·예술', '', ''],
-  ['B13', '징검다리', '멋진 신세계', '올더스 헉슬리', '미디어·예술,공학·IT,아직 모르겠음', '', '']
+  ['P01', '봉우리', '코스모스', '칼 세이건', '자연과학,공학·IT', '', '서울대 권장도서 100선', '깊게', 'Q04,Q05'],
+  ['P02', '봉우리', '부분과 전체', '베르너 하이젠베르크', '자연과학', '', '서울대 권장도서 100선', '깊게', 'Q05,Q10'],
+  ['P03', '봉우리', '침묵의 봄', '레이첼 카슨', '자연과학,의약·보건', '', '서울대 권장도서 100선', '깊게', 'Q13,Q01'],
+  ['P04', '봉우리', '과학혁명의 구조', '토머스 쿤', '자연과학,인문·언어', '', '서울대 권장도서 100선', '깊게', 'Q05'],
+  ['P05', '봉우리', '군주론', '니콜로 마키아벨리', '법·행정·정치', '', '서울대 권장도서 100선', '깊게', 'Q07'],
+  ['P06', '봉우리', '국부론', '애덤 스미스', '경영·경제', '', '서울대 권장도서 100선', '깊게', 'Q08'],
+  ['P07', '봉우리', '광장', '최인훈', '인문·언어,사회·심리', '', '서울대 권장도서 100선', '깊게', 'Q07,Q12'],
+  ['P08', '봉우리', '난장이가 쏘아올린 작은 공', '조세희', '사회·심리,인문·언어', '', '서울대 권장도서 100선', '깊게', 'Q06,Q12'],
+  ['P09', '봉우리', '열하일기', '박지원', '인문·언어,교육', '', '서울대 권장도서 100선', '깊게', 'Q14,Q11'],
+  ['B01', '징검다리', '과학콘서트', '정재승', '자연과학,공학·IT', 'P01', '', '가볍게', 'Q03,Q05'],
+  ['B02', '징검다리', '랩 걸', '호프 자런', '자연과학', 'P03', '', '보통', 'Q13,Q05'],
+  ['B03', '징검다리', '아픔이 길이 되려면', '김승섭', '의약·보건,사회·심리', 'P03', '', '보통', 'Q01,Q06'],
+  ['B04', '징검다리', '숨결이 바람 될 때', '폴 칼라니티', '의약·보건', '', '', '가볍게', 'Q02,Q01'],
+  ['B05', '징검다리', '수학이 필요한 순간', '김민형', '공학·IT,자연과학', 'P02', '', '보통', 'Q10'],
+  ['B06', '징검다리', '코드', '찰스 펫졸드', '공학·IT', '', '', '보통', 'Q03,Q10'],
+  ['B07', '징검다리', '정의란 무엇인가', '마이클 샌델', '법·행정·정치,교육', 'P05', '', '보통', 'Q06,Q07'],
+  ['B08', '징검다리', '선량한 차별주의자', '김지혜', '사회·심리,법·행정·정치,교육', 'P08', '', '가볍게', 'Q06'],
+  ['B09', '징검다리', '죽은 경제학자의 살아있는 아이디어', '토드 부크홀츠', '경영·경제', 'P06', '', '보통', 'Q08'],
+  ['B10', '징검다리', '사피엔스', '유발 하라리', '인문·언어,사회·심리,아직 모르겠음', 'P04', '', '보통', 'Q04,Q12'],
+  ['B11', '징검다리', '미움받을 용기', '기시미 이치로, 고가 후미타케', '사회·심리,교육,아직 모르겠음', '', '', '가볍게', 'Q09'],
+  ['B12', '징검다리', '죽은 시인의 사회', 'N. H. 클라인바움', '교육,미디어·예술', '', '', '가볍게', 'Q11,Q09'],
+  ['B13', '징검다리', '멋진 신세계', '올더스 헉슬리', '미디어·예술,공학·IT,아직 모르겠음', '', '', '보통', 'Q12,Q03']
 ].map(function (r) {
-  return { id: r[0], kind: r[1], title: r[2], author: r[3], careers: r[4].split(','), peakId: r[5], intro: '', source: r[6] };
+  return { id: r[0], kind: r[1], title: r[2], author: r[3], careers: r[4].split(','), peakId: r[5], intro: '', source: r[6], level: r[7], questions: r[8].split(',') };
 });
 
 // ===== Store.js =====
 /* Store.js — 구글 시트 읽기/쓰기 */
 
-var TABS_ = ['학생', '도서', '독후감', '댓글', '설정'];
+var TABS_ = ['학생', '도서', '독후감', '댓글', '설정', '질문'];
 
 function getSs_() { return SpreadsheetApp.getActiveSpreadsheet(); }
 
@@ -363,6 +432,7 @@ function setupSpreadsheet_() {
       sh.appendRow(HEADERS[tab]);
       if (sh.setFrozenRows) sh.setFrozenRows(1);
       if (tab === '도서') SEED_BOOKS.forEach(function (b) { sh.appendRow(objectToRow_('도서', b)); });
+      if (tab === '질문') SEED_QUESTIONS.forEach(function (q) { sh.appendRow(objectToRow_('질문', q)); });
     }
   });
   var sh = ss.getSheetByName('설정');
@@ -397,7 +467,7 @@ function readSettings_() {
 
 function readAll_() {
   function read(tab) { return dataRows_(tab).map(function (r) { return rowToObject_(tab, r); }); }
-  return { students: read('학생'), books: read('도서'), essays: read('독후감'), comments: read('댓글') };
+  return { students: read('학생'), books: read('도서'), essays: read('독후감'), comments: read('댓글'), questions: read('질문') };
 }
 
 function appendRow_(tab, obj) {
@@ -483,12 +553,12 @@ function bookIdSet_(db) {
 }
 // 접속키를 뺀 학생 정보
 function publicStudent_(s) {
-  return s ? { sid: s.sid, name: s.name, classNo: s.classNo, number: s.number, career: s.career } : null;
+  return s ? { sid: s.sid, name: s.name, classNo: s.classNo, number: s.number, career: s.career, level: s.level || '', questions: (s.questions || []).slice() } : null;
 }
 
 function apiBootstrap(token) {
   return run_(token, 'any', function (u) {
-    var out = { state: u.state, isAdmin: u.isAdmin, careers: u.settings.careers };
+    var out = { state: u.state, isAdmin: u.isAdmin, careers: u.settings.careers, questions: u.db.questions };
     if (u.state === 'student' || u.state === 'admin') {
       out.me = publicStudent_(u.student);
       out.libraryUrl = u.settings.libraryUrl;
@@ -524,13 +594,24 @@ function apiLogin(code, profile) {
   }, true);
 }
 
-function apiUpdateCareer(token, career) {
+// 진로·독서량·궁금한 질문(1~3개) 바꾸기
+function apiUpdateProfile(token, p) {
   return run_(token, 'member', function (u) {
-    if (!u.student) return fail_('학생만 진로를 바꿀 수 있어요.');
-    if ((u.settings.careers || []).indexOf(career) < 0) return fail_('진로 분야를 목록에서 골라 주세요.');
-    updateRowById_('학생', u.sid, { career: career });
-    return { career: career };
+    if (!u.student) return fail_('학생만 바꿀 수 있어요.');
+    var ids = new Set();
+    u.db.questions.forEach(function (q) { ids.add(q.id); });
+    var v = validateInterests_(p, u.settings, ids);
+    if (!v.ok) return v;
+    updateRowById_('학생', u.sid, v.data);
+    return v.data;
   }, true);
+}
+
+function apiRecommend(token) {
+  return run_(token, 'member', function (u) {
+    if (!u.student) return [];
+    return recommendBooks_(u.db, u.student, viewer_(u));
+  });
 }
 
 function apiCareerView(token, career) {

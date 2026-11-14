@@ -20,8 +20,9 @@ test('book careers split and joined', () => {
 
 test('round trip every tab', () => {
   const samples = {
-    '학생': { sid:'3-07', name:'김가', classNo:3, number:7, career:'교육', joinedAt:'2026-11-14T00:00:00.000Z', token:'tok' },
-    '도서': { id:'P01', title:'코스모스', author:'칼 세이건', kind:'봉우리', careers:['자연과학'], peakId:'', intro:'', source:'x' },
+    '학생': { sid:'3-07', name:'김가', classNo:3, number:7, career:'교육', joinedAt:'2026-11-14T00:00:00.000Z', token:'tok', level:'보통', questions:['Q1','Q2'] },
+    '도서': { id:'P01', title:'코스모스', author:'칼 세이건', kind:'봉우리', careers:['자연과학'], peakId:'', intro:'', source:'x', level:'깊게', questions:['Q4'] },
+    '질문': { id:'Q1', text:'기계도 생각할 수 있을까?' },
     '독후감': { id:'E-1', sid:'a@ai.jbedu.kr', bookId:'P01', body:'b', recTarget:'t', recReason:'r', question:'', createdAt:'c', updatedAt:'u', hidden:false },
     '댓글': { id:'C-1', essayId:'E-1', sid:'a@ai.jbedu.kr', body:'hi', createdAt:'c', hidden:true },
   };
@@ -43,7 +44,9 @@ test('studentId_ is class-number with two-digit number', () => {
 test('student row carries token', () => {
   const st = L.rowToObject_('학생', ['2-07', '김가', 2, 7, '교육', 't', 'TOK']);
   assert.equal(st.token, 'TOK');
-  assert.deepEqual(plain(L.HEADERS['학생']), ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키']);
+  assert.deepEqual(plain(L.HEADERS['학생']), ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키', '독서량', '관심질문']);
+  assert.deepEqual(plain(L.HEADERS['질문']), ['질문ID', '질문']);
+  assert.deepEqual(plain(L.HEADERS['도서']).slice(-2), ['난이도', '질문']);
 });
 
 test('newId unique and shaped', () => {
