@@ -1,0 +1,10 @@
+{
+  "name": "reading-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "bundle": "node tools/bundle.js"
+  }
+}
