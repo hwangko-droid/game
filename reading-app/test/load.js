@@ -51,3 +51,25 @@ function fakeSpreadsheet() {
 }
 
 module.exports.fakeSpreadsheet = fakeSpreadsheet;
+
+// ---- 앱 전체 로드 (가짜 Session/Lock/Html 포함) ----
+function loadApp() {
+  const f = fakeSpreadsheet();
+  const state = { email: '', lockCalls: 0 };
+  const globals = {
+    SpreadsheetApp: f.SpreadsheetApp,
+    Session: { getActiveUser: () => ({ getEmail: () => state.email }), getEffectiveUser: () => ({ getEmail: () => state.email }) },
+    LockService: { getScriptLock: () => ({ waitLock: () => { state.lockCalls++; }, releaseLock: () => {} }) },
+    HtmlService: {
+      createHtmlOutputFromFile: (name) => {
+        const out = { name, title: '', metas: {} };
+        out.setTitle = (t) => { out.title = t; return out; };
+        out.addMetaTag = (k, v) => { out.metas[k] = v; return out; };
+        return out;
+      },
+    },
+  };
+  const G = loadGs(['Logic.js', 'Seed.js', 'Store.js', 'Code.js'], globals);
+  return { G, ss: f.ss, state, as: (email) => { state.email = email; } };
+}
+module.exports.loadApp = loadApp;
