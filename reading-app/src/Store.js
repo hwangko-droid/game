@@ -15,7 +15,7 @@ function dataRows_(tab) {
   return values.slice(1).filter(function (r) { return r.some(function (c) { return c !== '' && c != null; }); });
 }
 
-function setupSpreadsheet(adminEmail) {
+function setupSpreadsheet_(adminEmail) {
   var ss = getSs_();
   TABS_.forEach(function (tab) {
     var sh = ss.getSheetByName(tab);
@@ -23,7 +23,7 @@ function setupSpreadsheet(adminEmail) {
       sh = ss.insertSheet(tab);
       sh.appendRow(HEADERS[tab]);
       if (sh.setFrozenRows) sh.setFrozenRows(1);
-      if (tab === '도서') SEED_BOOKS.forEach(function (b) { sh.appendRow(objectToRow('도서', b)); });
+      if (tab === '도서') SEED_BOOKS.forEach(function (b) { sh.appendRow(objectToRow_('도서', b)); });
     }
   });
   var sh = ss.getSheetByName('설정');
@@ -38,7 +38,7 @@ function setupSpreadsheet(adminEmail) {
   });
 }
 
-function readSettings() {
+function readSettings_() {
   var kv = {};
   dataRows_('설정').forEach(function (r) { kv[String(r[0]).trim()] = r[1]; });
   var careers = splitList_(kv['진로분야목록']);
@@ -53,25 +53,25 @@ function readSettings() {
   };
 }
 
-function readAll() {
-  function read(tab) { return dataRows_(tab).map(function (r) { return rowToObject(tab, r); }); }
+function readAll_() {
+  function read(tab) { return dataRows_(tab).map(function (r) { return rowToObject_(tab, r); }); }
   return { students: read('학생'), books: read('도서'), essays: read('독후감'), comments: read('댓글') };
 }
 
-function appendRow(tab, obj) {
-  sheet_(tab).appendRow(objectToRow(tab, obj));
+function appendRow_(tab, obj) {
+  sheet_(tab).appendRow(objectToRow_(tab, obj));
 }
 
-function updateRowById(tab, id, patch) {
+function updateRowById_(tab, id, patch) {
   var sh = sheet_(tab);
   var values = sh.getDataRange().getValues();
   var key = tab === '학생' ? normEmail_(id) : String(id);
   for (var i = 1; i < values.length; i++) {
     var cell = tab === '학생' ? normEmail_(values[i][0]) : String(values[i][0]);
     if (cell !== key) continue;
-    var obj = rowToObject(tab, values[i]);
+    var obj = rowToObject_(tab, values[i]);
     Object.keys(patch).forEach(function (k) { obj[k] = patch[k]; });
-    var row = objectToRow(tab, obj);
+    var row = objectToRow_(tab, obj);
     sh.getRange(i + 1, 1, 1, row.length).setValues([row]);
     return true;
   }

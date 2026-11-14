@@ -11,7 +11,7 @@ function setup() {
 
 test('setupSpreadsheet creates tabs with headers and seed books', () => {
   const { G, ss } = setup();
-  G.setupSpreadsheet('t@ai.jbedu.kr');
+  G.setupSpreadsheet_('t@ai.jbedu.kr');
   for (const tab of ['학생', '도서', '독후감', '댓글', '설정']) {
     assert.deepEqual(plain(ss._sheets[tab][0]), plain(G.HEADERS[tab]), tab);
   }
@@ -20,18 +20,18 @@ test('setupSpreadsheet creates tabs with headers and seed books', () => {
 
 test('setupSpreadsheet is idempotent', () => {
   const { G, ss } = setup();
-  G.setupSpreadsheet('t@ai.jbedu.kr');
-  const code = G.readSettings().entryCode;
-  G.setupSpreadsheet('t@ai.jbedu.kr');
+  G.setupSpreadsheet_('t@ai.jbedu.kr');
+  const code = G.readSettings_().entryCode;
+  G.setupSpreadsheet_('t@ai.jbedu.kr');
   assert.equal(ss._sheets['도서'].length, 1 + G.SEED_BOOKS.length);
   assert.equal(ss._sheets['설정'].length, 1 + Object.keys(G.SEED_SETTINGS).length);
-  assert.equal(G.readSettings().entryCode, code);
+  assert.equal(G.readSettings_().entryCode, code);
 });
 
 test('readSettings defaults', () => {
   const { G } = setup();
-  G.setupSpreadsheet('t@ai.jbedu.kr');
-  const s = plain(G.readSettings());
+  G.setupSpreadsheet_('t@ai.jbedu.kr');
+  const s = plain(G.readSettings_());
   assert.equal(s.entryCodeOn, true);
   assert.equal(s.minBodyChars, 300);
   assert.deepEqual(s.careers, plain(G.SEED_CAREERS));
@@ -43,29 +43,29 @@ test('readSettings defaults', () => {
 
 test('appendRow and readAll round trip', () => {
   const { G } = setup();
-  G.setupSpreadsheet('t@ai.jbedu.kr');
+  G.setupSpreadsheet_('t@ai.jbedu.kr');
   const c = { id: 'C-1', essayId: 'E-1', email: 'a@ai.jbedu.kr', body: '안녕', createdAt: 'x', hidden: false };
-  G.appendRow('댓글', c);
-  assert.deepEqual(plain(G.readAll().comments), [c]);
-  assert.equal(G.readAll().books.length, G.SEED_BOOKS.length);
+  G.appendRow_('댓글', c);
+  assert.deepEqual(plain(G.readAll_().comments), [c]);
+  assert.equal(G.readAll_().books.length, G.SEED_BOOKS.length);
 });
 
 test('updateRowById patches only given fields', () => {
   const { G } = setup();
-  G.setupSpreadsheet('t@ai.jbedu.kr');
+  G.setupSpreadsheet_('t@ai.jbedu.kr');
   const e = { id: 'E-1', email: 'a@ai.jbedu.kr', bookId: 'P01', body: '옛', recTarget: 't', recReason: 'r', question: 'q', createdAt: 'c', updatedAt: '', hidden: false };
-  G.appendRow('독후감', e);
-  assert.equal(G.updateRowById('독후감', 'E-1', { body: '새' }), true);
-  assert.deepEqual(plain(G.readAll().essays[0]), { ...e, body: '새' });
-  assert.equal(G.updateRowById('독후감', 'nope', { body: 'x' }), false);
+  G.appendRow_('독후감', e);
+  assert.equal(G.updateRowById_('독후감', 'E-1', { body: '새' }), true);
+  assert.deepEqual(plain(G.readAll_().essays[0]), { ...e, body: '새' });
+  assert.equal(G.updateRowById_('독후감', 'nope', { body: 'x' }), false);
 });
 
 test('updateRowById on 학생 keys by email case-insensitively', () => {
   const { G } = setup();
-  G.setupSpreadsheet('t@ai.jbedu.kr');
-  G.appendRow('학생', { email: 'a@ai.jbedu.kr', name: '가', classNo: 1, number: 1, career: '교육', joinedAt: 'x' });
-  assert.equal(G.updateRowById('학생', 'A@ai.jbedu.kr', { career: '공학·IT' }), true);
-  assert.equal(G.readAll().students[0].career, '공학·IT');
+  G.setupSpreadsheet_('t@ai.jbedu.kr');
+  G.appendRow_('학생', { email: 'a@ai.jbedu.kr', name: '가', classNo: 1, number: 1, career: '교육', joinedAt: 'x' });
+  assert.equal(G.updateRowById_('학생', 'A@ai.jbedu.kr', { career: '공학·IT' }), true);
+  assert.equal(G.readAll_().students[0].career, '공학·IT');
 });
 
 test('seed books consistent', () => {

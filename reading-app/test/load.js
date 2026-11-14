@@ -21,6 +21,14 @@ function plain(v) { return JSON.parse(JSON.stringify(v)); }
 module.exports = { loadGs, plain };
 
 // ---- 가짜 SpreadsheetApp (탭별 2차원 배열) ----
+function sheetCoerce(v) {
+  if (typeof v !== 'string') return v;
+  if (v.startsWith("'")) return v.slice(1);
+  if (v.startsWith('=')) return '#FORMULA_RESULT';
+  if (/^[+-]?\d+(\.\d+)?$/.test(v.trim())) return Number(v);
+  return v;
+}
+
 function fakeSpreadsheet() {
   const sheets = {};
   function sheet(name) {
@@ -29,12 +37,12 @@ function fakeSpreadsheet() {
       getName: () => name,
       getDataRange: () => ({ getValues: () => (rows.length ? rows.map(r => r.slice()) : [[]]) }),
       getLastRow: () => rows.length,
-      appendRow: (r) => { rows.push(r.slice()); },
+      appendRow: (r) => { rows.push(r.map(sheetCoerce)); },
       getRange: (r, c, nr = 1, nc = 1) => ({
         setValues: (vals) => {
           for (let i = 0; i < nr; i++) {
             while (rows.length < r + i) rows.push([]);
-            for (let j = 0; j < nc; j++) rows[r - 1 + i][c - 1 + j] = vals[i][j];
+            for (let j = 0; j < nc; j++) rows[r - 1 + i][c - 1 + j] = sheetCoerce(vals[i][j]);
           }
         },
         getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => (rows[r - 1 + i] || [])[c - 1 + j] ?? '')),
@@ -51,6 +59,7 @@ function fakeSpreadsheet() {
 }
 
 module.exports.fakeSpreadsheet = fakeSpreadsheet;
+module.exports.sheetCoerce = sheetCoerce;
 
 // ---- 앱 전체 로드 (가짜 Session/Lock/Html 포함) ----
 function loadApp() {

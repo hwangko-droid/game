@@ -8,16 +8,16 @@ function doGet() {
 
 // 선생님이 앱스 스크립트 편집기에서 한 번 실행: 시트 탭·기본값을 만들고 실행자를 관리자로 등록
 function 초기설정() {
-  setupSpreadsheet(Session.getEffectiveUser().getEmail());
+  setupSpreadsheet_(Session.getEffectiveUser().getEmail());
 }
 
 function currentUser_() {
   var email = normEmail_(Session.getActiveUser().getEmail());
-  var settings = readSettings();
-  var db = readAll();
+  var settings = readSettings_();
+  var db = readAll_();
   var student = null;
   db.students.forEach(function (s) { if (normEmail_(s.email) === email) student = s; });
-  var state = accessState(email, student, settings);
+  var state = accessState_(email, student, settings);
   return { email: email, state: state, student: student, settings: settings, isAdmin: state === 'admin', db: db };
 }
 
@@ -67,7 +67,7 @@ function apiBootstrap() {
 function apiCheckCode(code) {
   return run_('any', function (u) {
     if (u.state === 'outsider') return fail_(ERR_ENTRY_);
-    return { valid: checkEntryCode(code, u.settings) };
+    return { valid: checkEntryCode_(code, u.settings) };
   });
 }
 
@@ -75,29 +75,29 @@ function apiRegister(profile, code) {
   return run_('any', function (u) {
     if (u.state === 'outsider') return fail_(ERR_ENTRY_);
     var existing = u.student;
-    if (!existing && u.state !== 'admin' && !checkEntryCode(code, u.settings)) return fail_('입장 코드가 맞지 않아요.');
-    var v = validateProfile(profile, u.settings);
+    if (!existing && u.state !== 'admin' && !checkEntryCode_(code, u.settings)) return fail_('입장 코드가 맞지 않아요.');
+    var v = validateProfile_(profile, u.settings);
     if (!v.ok) return v;
     if (existing) {
-      updateRowById('학생', u.email, v.data);
+      updateRowById_('학생', u.email, v.data);
     } else {
-      appendRow('학생', { email: u.email, name: v.data.name, classNo: v.data.classNo, number: v.data.number, career: v.data.career, joinedAt: nowIso_() });
+      appendRow_('학생', { email: u.email, name: v.data.name, classNo: v.data.classNo, number: v.data.number, career: v.data.career, joinedAt: nowIso_() });
     }
     return { state: u.isAdmin ? 'admin' : 'student' };
   }, true);
 }
 
 function apiCareerView(career) {
-  return run_('member', function (u) { return careerView(u.db, career, viewer_(u)); });
+  return run_('member', function (u) { return careerView_(u.db, career, viewer_(u)); });
 }
 
 function apiBookCards(filter) {
-  return run_('member', function (u) { return bookCards(u.db, filter || {}, viewer_(u)); });
+  return run_('member', function (u) { return bookCards_(u.db, filter || {}, viewer_(u)); });
 }
 
 function apiEssayDetail(id) {
   return run_('member', function (u) {
-    var d = essayDetail(u.db, id, viewer_(u));
+    var d = essayDetail_(u.db, id, viewer_(u));
     if (!d) return null;
     d.essay.isMine = normEmail_(d.essay.authorEmail) === u.email;
     delete d.essay.authorEmail;
@@ -106,20 +106,20 @@ function apiEssayDetail(id) {
 }
 
 function apiMyRecords() {
-  return run_('member', function (u) { return myRecords(u.db, u.email); });
+  return run_('member', function (u) { return myRecords_(u.db, u.email); });
 }
 
 function apiAdminSummary() {
-  return run_('admin', function (u) { return adminSummary(u.db); });
+  return run_('admin', function (u) { return adminSummary_(u.db); });
 }
 
 function apiSubmitEssay(e) {
   return run_('member', function (u) {
-    var v = validateEssay(e, u.settings, bookIdSet_(u.db));
+    var v = validateEssay_(e, u.settings, bookIdSet_(u.db));
     if (!v.ok) return v;
     var now = nowIso_();
-    var id = newId('E');
-    appendRow('독후감', {
+    var id = newId_('E');
+    appendRow_('독후감', {
       id: id, email: u.email, bookId: v.data.bookId, body: v.data.body, recTarget: v.data.recTarget,
       recReason: v.data.recReason, question: v.data.question, createdAt: now, updatedAt: '', hidden: false
     });
@@ -132,9 +132,9 @@ function apiUpdateEssay(id, e) {
     var cur = u.db.essays.filter(function (x) { return x.id === id; })[0];
     if (!cur) return fail_('글을 찾을 수 없어요.');
     if (normEmail_(cur.email) !== u.email) return fail_('내가 쓴 글만 고칠 수 있어요.');
-    var v = validateEssay(e, u.settings, bookIdSet_(u.db));
+    var v = validateEssay_(e, u.settings, bookIdSet_(u.db));
     if (!v.ok) return v;
-    updateRowById('독후감', id, {
+    updateRowById_('독후감', id, {
       bookId: v.data.bookId, body: v.data.body, recTarget: v.data.recTarget, recReason: v.data.recReason,
       question: v.data.question, updatedAt: nowIso_()
     });
@@ -144,11 +144,11 @@ function apiUpdateEssay(id, e) {
 
 function apiAddComment(essayId, body) {
   return run_('member', function (u) {
-    if (!essayDetail(u.db, essayId, viewer_(u)) || (!u.isAdmin && isHiddenEssay_(u.db, essayId))) return fail_('댓글을 달 수 없는 글이에요.');
-    var v = validateComment(body);
+    if (!essayDetail_(u.db, essayId, viewer_(u)) || (!u.isAdmin && isHiddenEssay_(u.db, essayId))) return fail_('댓글을 달 수 없는 글이에요.');
+    var v = validateComment_(body);
     if (!v.ok) return v;
-    var id = newId('C');
-    appendRow('댓글', { id: id, essayId: essayId, email: u.email, body: v.data, createdAt: nowIso_(), hidden: false });
+    var id = newId_('C');
+    appendRow_('댓글', { id: id, essayId: essayId, email: u.email, body: v.data, createdAt: nowIso_(), hidden: false });
     return { id: id };
   }, true);
 }
@@ -159,10 +159,10 @@ function isHiddenEssay_(db, essayId) {
 
 function apiAddBook(b) {
   return run_('member', function (u) {
-    var v = validateNewBook(b, u.settings);
+    var v = validateNewBook_(b, u.settings);
     if (!v.ok) return v;
-    var id = newId('U');
-    appendRow('도서', { id: id, title: v.data.title, author: v.data.author, kind: '학생추가', careers: v.data.careers, peakId: '', intro: '', source: '' });
+    var id = newId_('U');
+    appendRow_('도서', { id: id, title: v.data.title, author: v.data.author, kind: '학생추가', careers: v.data.careers, peakId: '', intro: '', source: '' });
     return { id: id };
   }, true);
 }
@@ -170,7 +170,7 @@ function apiAddBook(b) {
 function apiSetHidden(tab, id, hidden) {
   return run_('admin', function () {
     if (tab !== '독후감' && tab !== '댓글') return fail_('숨길 수 없는 항목이에요.');
-    if (!updateRowById(tab, id, { hidden: !!hidden })) return fail_('항목을 찾을 수 없어요.');
+    if (!updateRowById_(tab, id, { hidden: !!hidden })) return fail_('항목을 찾을 수 없어요.');
     return { id: id, hidden: !!hidden };
   }, true);
 }

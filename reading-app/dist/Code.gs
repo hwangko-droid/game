@@ -41,31 +41,33 @@ function valueToCell_(v, kind) {
   if (kind === 'list') return (v || []).join(',');
   if (kind === 'b') return v ? 'TRUE' : 'FALSE';
   if (kind === 'n') return Number(v) || 0;
-  return v == null ? '' : v;
+  if (v == null || v === '') return '';
+  // 앞에 ' 를 붙이면 시트가 수식(=…)·숫자·날짜로 해석하지 않고 글자 그대로 저장한다 (읽을 때 ' 는 보이지 않음)
+  return "'" + String(v);
 }
 
-function rowToObject(tab, row) {
+function rowToObject_(tab, row) {
   var o = {};
   FIELDS_[tab].forEach(function (f, i) { o[f[0]] = cellToValue_(row[i], f[1]); });
   return o;
 }
 
-function objectToRow(tab, obj) {
+function objectToRow_(tab, obj) {
   return FIELDS_[tab].map(function (f) { return valueToCell_(obj[f[0]], f[1]); });
 }
 
-function newId(prefix) {
+function newId_(prefix) {
   var rand = Math.floor(Math.random() * 36 * 36 * 36 * 36).toString(36);
   while (rand.length < 4) rand = '0' + rand;
-  newId.seq_ = (newId.seq_ || 0) + 1;
-  return prefix + '-' + Date.now().toString(36) + rand + newId.seq_.toString(36);
+  newId_.seq_ = (newId_.seq_ || 0) + 1;
+  return prefix + '-' + Date.now().toString(36) + rand + newId_.seq_.toString(36);
 }
 
 function normEmail_(email) {
   return String(email == null ? '' : email).trim().toLowerCase();
 }
 
-function isSchoolEmail(email) {
+function isSchoolEmail_(email) {
   var e = normEmail_(email);
   var at = e.lastIndexOf('@');
   return at > 0 && e.slice(at + 1) === SCHOOL_DOMAIN;
@@ -81,14 +83,14 @@ function isAdminEmail_(email, settings) {
   return (settings.adminEmails || []).some(function (a) { return normEmail_(a) === e; });
 }
 
-function accessState(email, student, settings) {
-  if (!isSchoolEmail(email)) return 'outsider';
+function accessState_(email, student, settings) {
+  if (!isSchoolEmail_(email)) return 'outsider';
   if (isAdminEmail_(email, settings)) return 'admin';
   if (student) return 'student';
   return settings.entryCodeOn ? 'needsCode' : 'needsProfile';
 }
 
-function checkEntryCode(input, settings) {
+function checkEntryCode_(input, settings) {
   if (!settings.entryCodeOn) return true;
   var a = String(input == null ? '' : input).trim().toLowerCase();
   var b = String(settings.entryCode == null ? '' : settings.entryCode).trim().toLowerCase();
@@ -100,7 +102,7 @@ function intInRange_(v, lo, hi) {
   return String(v).trim() !== '' && Number.isInteger(n) && n >= lo && n <= hi ? n : null;
 }
 
-function validateProfile(p, settings) {
+function validateProfile_(p, settings) {
   p = p || {};
   var name = String(p.name == null ? '' : p.name).trim();
   if (name.length < 1 || name.length > 20) return fail_('이름을 1~20자로 입력해 주세요.');
@@ -116,7 +118,7 @@ function validateProfile(p, settings) {
 
 function str_(v) { return String(v == null ? '' : v).trim(); }
 
-function validateEssay(e, settings, bookIds) {
+function validateEssay_(e, settings, bookIds) {
   e = e || {};
   var min = Number(settings.minBodyChars) || 0;
   var body = str_(e.body);
@@ -130,14 +132,14 @@ function validateEssay(e, settings, bookIds) {
   return ok_({ bookId: e.bookId, body: body, recTarget: recTarget, recReason: recReason, question: question });
 }
 
-function validateComment(body) {
+function validateComment_(body) {
   var b = str_(body);
   if (!b) return fail_('댓글 내용을 입력해 주세요.');
   if (b.length > 500) return fail_('댓글은 500자까지 쓸 수 있어요.');
   return ok_(b);
 }
 
-function validateNewBook(b, settings) {
+function validateNewBook_(b, settings) {
   b = b || {};
   var title = str_(b.title), author = str_(b.author);
   if (title.length < 1 || title.length > 100) return fail_('책 제목을 1~100자로 입력해 주세요.');
@@ -197,7 +199,7 @@ function careerOf_(c, email) {
   return s ? s.career : '';
 }
 
-function careerView(db, career, viewer) {
+function careerView_(db, career, viewer) {
   var c = ctx_(db, viewer);
   var friends = db.students.filter(function (s) { return s.career === career; }).slice().sort(byClassNo_)
     .map(function (s) {
@@ -216,7 +218,7 @@ function careerView(db, career, viewer) {
 
 function squash_(s) { return String(s || '').replace(/\s+/g, '').toLowerCase(); }
 
-function bookCards(db, filter, viewer) {
+function bookCards_(db, filter, viewer) {
   filter = filter || {};
   var c = ctx_(db, viewer);
   var q = squash_(filter.q);
@@ -252,7 +254,7 @@ function bookCards(db, filter, viewer) {
   });
 }
 
-function essayDetail(db, essayId, viewer) {
+function essayDetail_(db, essayId, viewer) {
   var c = ctx_(db, viewer);
   var e = c.essays.filter(function (x) { return x.id === essayId; })[0];
   if (!e) return null;
@@ -268,7 +270,7 @@ function essayDetail(db, essayId, viewer) {
   return { essay: card, comments: comments };
 }
 
-function myRecords(db, email) {
+function myRecords_(db, email) {
   var me = normEmail_(email);
   var c = ctx_(db, { isAdmin: false });
   var mineAll = db.essays.filter(function (e) { return normEmail_(e.email) === me; });
@@ -282,7 +284,7 @@ function myRecords(db, email) {
   return { essays: essays, commentsOnMine: commentsOnMine };
 }
 
-function adminSummary(db) {
+function adminSummary_(db) {
   var classes = {};
   db.students.slice().sort(byClassNo_).forEach(function (s) {
     var em = normEmail_(s.email);
@@ -357,7 +359,7 @@ function dataRows_(tab) {
   return values.slice(1).filter(function (r) { return r.some(function (c) { return c !== '' && c != null; }); });
 }
 
-function setupSpreadsheet(adminEmail) {
+function setupSpreadsheet_(adminEmail) {
   var ss = getSs_();
   TABS_.forEach(function (tab) {
     var sh = ss.getSheetByName(tab);
@@ -365,7 +367,7 @@ function setupSpreadsheet(adminEmail) {
       sh = ss.insertSheet(tab);
       sh.appendRow(HEADERS[tab]);
       if (sh.setFrozenRows) sh.setFrozenRows(1);
-      if (tab === '도서') SEED_BOOKS.forEach(function (b) { sh.appendRow(objectToRow('도서', b)); });
+      if (tab === '도서') SEED_BOOKS.forEach(function (b) { sh.appendRow(objectToRow_('도서', b)); });
     }
   });
   var sh = ss.getSheetByName('설정');
@@ -380,7 +382,7 @@ function setupSpreadsheet(adminEmail) {
   });
 }
 
-function readSettings() {
+function readSettings_() {
   var kv = {};
   dataRows_('설정').forEach(function (r) { kv[String(r[0]).trim()] = r[1]; });
   var careers = splitList_(kv['진로분야목록']);
@@ -395,25 +397,25 @@ function readSettings() {
   };
 }
 
-function readAll() {
-  function read(tab) { return dataRows_(tab).map(function (r) { return rowToObject(tab, r); }); }
+function readAll_() {
+  function read(tab) { return dataRows_(tab).map(function (r) { return rowToObject_(tab, r); }); }
   return { students: read('학생'), books: read('도서'), essays: read('독후감'), comments: read('댓글') };
 }
 
-function appendRow(tab, obj) {
-  sheet_(tab).appendRow(objectToRow(tab, obj));
+function appendRow_(tab, obj) {
+  sheet_(tab).appendRow(objectToRow_(tab, obj));
 }
 
-function updateRowById(tab, id, patch) {
+function updateRowById_(tab, id, patch) {
   var sh = sheet_(tab);
   var values = sh.getDataRange().getValues();
   var key = tab === '학생' ? normEmail_(id) : String(id);
   for (var i = 1; i < values.length; i++) {
     var cell = tab === '학생' ? normEmail_(values[i][0]) : String(values[i][0]);
     if (cell !== key) continue;
-    var obj = rowToObject(tab, values[i]);
+    var obj = rowToObject_(tab, values[i]);
     Object.keys(patch).forEach(function (k) { obj[k] = patch[k]; });
-    var row = objectToRow(tab, obj);
+    var row = objectToRow_(tab, obj);
     sh.getRange(i + 1, 1, 1, row.length).setValues([row]);
     return true;
   }
@@ -431,16 +433,16 @@ function doGet() {
 
 // 선생님이 앱스 스크립트 편집기에서 한 번 실행: 시트 탭·기본값을 만들고 실행자를 관리자로 등록
 function 초기설정() {
-  setupSpreadsheet(Session.getEffectiveUser().getEmail());
+  setupSpreadsheet_(Session.getEffectiveUser().getEmail());
 }
 
 function currentUser_() {
   var email = normEmail_(Session.getActiveUser().getEmail());
-  var settings = readSettings();
-  var db = readAll();
+  var settings = readSettings_();
+  var db = readAll_();
   var student = null;
   db.students.forEach(function (s) { if (normEmail_(s.email) === email) student = s; });
-  var state = accessState(email, student, settings);
+  var state = accessState_(email, student, settings);
   return { email: email, state: state, student: student, settings: settings, isAdmin: state === 'admin', db: db };
 }
 
@@ -490,7 +492,7 @@ function apiBootstrap() {
 function apiCheckCode(code) {
   return run_('any', function (u) {
     if (u.state === 'outsider') return fail_(ERR_ENTRY_);
-    return { valid: checkEntryCode(code, u.settings) };
+    return { valid: checkEntryCode_(code, u.settings) };
   });
 }
 
@@ -498,29 +500,29 @@ function apiRegister(profile, code) {
   return run_('any', function (u) {
     if (u.state === 'outsider') return fail_(ERR_ENTRY_);
     var existing = u.student;
-    if (!existing && u.state !== 'admin' && !checkEntryCode(code, u.settings)) return fail_('입장 코드가 맞지 않아요.');
-    var v = validateProfile(profile, u.settings);
+    if (!existing && u.state !== 'admin' && !checkEntryCode_(code, u.settings)) return fail_('입장 코드가 맞지 않아요.');
+    var v = validateProfile_(profile, u.settings);
     if (!v.ok) return v;
     if (existing) {
-      updateRowById('학생', u.email, v.data);
+      updateRowById_('학생', u.email, v.data);
     } else {
-      appendRow('학생', { email: u.email, name: v.data.name, classNo: v.data.classNo, number: v.data.number, career: v.data.career, joinedAt: nowIso_() });
+      appendRow_('학생', { email: u.email, name: v.data.name, classNo: v.data.classNo, number: v.data.number, career: v.data.career, joinedAt: nowIso_() });
     }
     return { state: u.isAdmin ? 'admin' : 'student' };
   }, true);
 }
 
 function apiCareerView(career) {
-  return run_('member', function (u) { return careerView(u.db, career, viewer_(u)); });
+  return run_('member', function (u) { return careerView_(u.db, career, viewer_(u)); });
 }
 
 function apiBookCards(filter) {
-  return run_('member', function (u) { return bookCards(u.db, filter || {}, viewer_(u)); });
+  return run_('member', function (u) { return bookCards_(u.db, filter || {}, viewer_(u)); });
 }
 
 function apiEssayDetail(id) {
   return run_('member', function (u) {
-    var d = essayDetail(u.db, id, viewer_(u));
+    var d = essayDetail_(u.db, id, viewer_(u));
     if (!d) return null;
     d.essay.isMine = normEmail_(d.essay.authorEmail) === u.email;
     delete d.essay.authorEmail;
@@ -529,20 +531,20 @@ function apiEssayDetail(id) {
 }
 
 function apiMyRecords() {
-  return run_('member', function (u) { return myRecords(u.db, u.email); });
+  return run_('member', function (u) { return myRecords_(u.db, u.email); });
 }
 
 function apiAdminSummary() {
-  return run_('admin', function (u) { return adminSummary(u.db); });
+  return run_('admin', function (u) { return adminSummary_(u.db); });
 }
 
 function apiSubmitEssay(e) {
   return run_('member', function (u) {
-    var v = validateEssay(e, u.settings, bookIdSet_(u.db));
+    var v = validateEssay_(e, u.settings, bookIdSet_(u.db));
     if (!v.ok) return v;
     var now = nowIso_();
-    var id = newId('E');
-    appendRow('독후감', {
+    var id = newId_('E');
+    appendRow_('독후감', {
       id: id, email: u.email, bookId: v.data.bookId, body: v.data.body, recTarget: v.data.recTarget,
       recReason: v.data.recReason, question: v.data.question, createdAt: now, updatedAt: '', hidden: false
     });
@@ -555,9 +557,9 @@ function apiUpdateEssay(id, e) {
     var cur = u.db.essays.filter(function (x) { return x.id === id; })[0];
     if (!cur) return fail_('글을 찾을 수 없어요.');
     if (normEmail_(cur.email) !== u.email) return fail_('내가 쓴 글만 고칠 수 있어요.');
-    var v = validateEssay(e, u.settings, bookIdSet_(u.db));
+    var v = validateEssay_(e, u.settings, bookIdSet_(u.db));
     if (!v.ok) return v;
-    updateRowById('독후감', id, {
+    updateRowById_('독후감', id, {
       bookId: v.data.bookId, body: v.data.body, recTarget: v.data.recTarget, recReason: v.data.recReason,
       question: v.data.question, updatedAt: nowIso_()
     });
@@ -567,11 +569,11 @@ function apiUpdateEssay(id, e) {
 
 function apiAddComment(essayId, body) {
   return run_('member', function (u) {
-    if (!essayDetail(u.db, essayId, viewer_(u)) || (!u.isAdmin && isHiddenEssay_(u.db, essayId))) return fail_('댓글을 달 수 없는 글이에요.');
-    var v = validateComment(body);
+    if (!essayDetail_(u.db, essayId, viewer_(u)) || (!u.isAdmin && isHiddenEssay_(u.db, essayId))) return fail_('댓글을 달 수 없는 글이에요.');
+    var v = validateComment_(body);
     if (!v.ok) return v;
-    var id = newId('C');
-    appendRow('댓글', { id: id, essayId: essayId, email: u.email, body: v.data, createdAt: nowIso_(), hidden: false });
+    var id = newId_('C');
+    appendRow_('댓글', { id: id, essayId: essayId, email: u.email, body: v.data, createdAt: nowIso_(), hidden: false });
     return { id: id };
   }, true);
 }
@@ -582,10 +584,10 @@ function isHiddenEssay_(db, essayId) {
 
 function apiAddBook(b) {
   return run_('member', function (u) {
-    var v = validateNewBook(b, u.settings);
+    var v = validateNewBook_(b, u.settings);
     if (!v.ok) return v;
-    var id = newId('U');
-    appendRow('도서', { id: id, title: v.data.title, author: v.data.author, kind: '학생추가', careers: v.data.careers, peakId: '', intro: '', source: '' });
+    var id = newId_('U');
+    appendRow_('도서', { id: id, title: v.data.title, author: v.data.author, kind: '학생추가', careers: v.data.careers, peakId: '', intro: '', source: '' });
     return { id: id };
   }, true);
 }
@@ -593,7 +595,7 @@ function apiAddBook(b) {
 function apiSetHidden(tab, id, hidden) {
   return run_('admin', function () {
     if (tab !== '독후감' && tab !== '댓글') return fail_('숨길 수 없는 항목이에요.');
-    if (!updateRowById(tab, id, { hidden: !!hidden })) return fail_('항목을 찾을 수 없어요.');
+    if (!updateRowById_(tab, id, { hidden: !!hidden })) return fail_('항목을 찾을 수 없어요.');
     return { id: id, hidden: !!hidden };
   }, true);
 }

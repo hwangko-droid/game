@@ -38,31 +38,33 @@ function valueToCell_(v, kind) {
   if (kind === 'list') return (v || []).join(',');
   if (kind === 'b') return v ? 'TRUE' : 'FALSE';
   if (kind === 'n') return Number(v) || 0;
-  return v == null ? '' : v;
+  if (v == null || v === '') return '';
+  // 앞에 ' 를 붙이면 시트가 수식(=…)·숫자·날짜로 해석하지 않고 글자 그대로 저장한다 (읽을 때 ' 는 보이지 않음)
+  return "'" + String(v);
 }
 
-function rowToObject(tab, row) {
+function rowToObject_(tab, row) {
   var o = {};
   FIELDS_[tab].forEach(function (f, i) { o[f[0]] = cellToValue_(row[i], f[1]); });
   return o;
 }
 
-function objectToRow(tab, obj) {
+function objectToRow_(tab, obj) {
   return FIELDS_[tab].map(function (f) { return valueToCell_(obj[f[0]], f[1]); });
 }
 
-function newId(prefix) {
+function newId_(prefix) {
   var rand = Math.floor(Math.random() * 36 * 36 * 36 * 36).toString(36);
   while (rand.length < 4) rand = '0' + rand;
-  newId.seq_ = (newId.seq_ || 0) + 1;
-  return prefix + '-' + Date.now().toString(36) + rand + newId.seq_.toString(36);
+  newId_.seq_ = (newId_.seq_ || 0) + 1;
+  return prefix + '-' + Date.now().toString(36) + rand + newId_.seq_.toString(36);
 }
 
 function normEmail_(email) {
   return String(email == null ? '' : email).trim().toLowerCase();
 }
 
-function isSchoolEmail(email) {
+function isSchoolEmail_(email) {
   var e = normEmail_(email);
   var at = e.lastIndexOf('@');
   return at > 0 && e.slice(at + 1) === SCHOOL_DOMAIN;
@@ -78,14 +80,14 @@ function isAdminEmail_(email, settings) {
   return (settings.adminEmails || []).some(function (a) { return normEmail_(a) === e; });
 }
 
-function accessState(email, student, settings) {
-  if (!isSchoolEmail(email)) return 'outsider';
+function accessState_(email, student, settings) {
+  if (!isSchoolEmail_(email)) return 'outsider';
   if (isAdminEmail_(email, settings)) return 'admin';
   if (student) return 'student';
   return settings.entryCodeOn ? 'needsCode' : 'needsProfile';
 }
 
-function checkEntryCode(input, settings) {
+function checkEntryCode_(input, settings) {
   if (!settings.entryCodeOn) return true;
   var a = String(input == null ? '' : input).trim().toLowerCase();
   var b = String(settings.entryCode == null ? '' : settings.entryCode).trim().toLowerCase();
@@ -97,7 +99,7 @@ function intInRange_(v, lo, hi) {
   return String(v).trim() !== '' && Number.isInteger(n) && n >= lo && n <= hi ? n : null;
 }
 
-function validateProfile(p, settings) {
+function validateProfile_(p, settings) {
   p = p || {};
   var name = String(p.name == null ? '' : p.name).trim();
   if (name.length < 1 || name.length > 20) return fail_('이름을 1~20자로 입력해 주세요.');
@@ -113,7 +115,7 @@ function validateProfile(p, settings) {
 
 function str_(v) { return String(v == null ? '' : v).trim(); }
 
-function validateEssay(e, settings, bookIds) {
+function validateEssay_(e, settings, bookIds) {
   e = e || {};
   var min = Number(settings.minBodyChars) || 0;
   var body = str_(e.body);
@@ -127,14 +129,14 @@ function validateEssay(e, settings, bookIds) {
   return ok_({ bookId: e.bookId, body: body, recTarget: recTarget, recReason: recReason, question: question });
 }
 
-function validateComment(body) {
+function validateComment_(body) {
   var b = str_(body);
   if (!b) return fail_('댓글 내용을 입력해 주세요.');
   if (b.length > 500) return fail_('댓글은 500자까지 쓸 수 있어요.');
   return ok_(b);
 }
 
-function validateNewBook(b, settings) {
+function validateNewBook_(b, settings) {
   b = b || {};
   var title = str_(b.title), author = str_(b.author);
   if (title.length < 1 || title.length > 100) return fail_('책 제목을 1~100자로 입력해 주세요.');
@@ -194,7 +196,7 @@ function careerOf_(c, email) {
   return s ? s.career : '';
 }
 
-function careerView(db, career, viewer) {
+function careerView_(db, career, viewer) {
   var c = ctx_(db, viewer);
   var friends = db.students.filter(function (s) { return s.career === career; }).slice().sort(byClassNo_)
     .map(function (s) {
@@ -213,7 +215,7 @@ function careerView(db, career, viewer) {
 
 function squash_(s) { return String(s || '').replace(/\s+/g, '').toLowerCase(); }
 
-function bookCards(db, filter, viewer) {
+function bookCards_(db, filter, viewer) {
   filter = filter || {};
   var c = ctx_(db, viewer);
   var q = squash_(filter.q);
@@ -249,7 +251,7 @@ function bookCards(db, filter, viewer) {
   });
 }
 
-function essayDetail(db, essayId, viewer) {
+function essayDetail_(db, essayId, viewer) {
   var c = ctx_(db, viewer);
   var e = c.essays.filter(function (x) { return x.id === essayId; })[0];
   if (!e) return null;
@@ -265,7 +267,7 @@ function essayDetail(db, essayId, viewer) {
   return { essay: card, comments: comments };
 }
 
-function myRecords(db, email) {
+function myRecords_(db, email) {
   var me = normEmail_(email);
   var c = ctx_(db, { isAdmin: false });
   var mineAll = db.essays.filter(function (e) { return normEmail_(e.email) === me; });
@@ -279,7 +281,7 @@ function myRecords(db, email) {
   return { essays: essays, commentsOnMine: commentsOnMine };
 }
 
-function adminSummary(db) {
+function adminSummary_(db) {
   var classes = {};
   db.students.slice().sort(byClassNo_).forEach(function (s) {
     var em = normEmail_(s.email);

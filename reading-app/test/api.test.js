@@ -10,14 +10,14 @@ const essay = { bookId: 'B03', body: '가'.repeat(300), recTarget: '의사 꿈�
 function boot() {
   const app = loadApp();
   app.as(T); app.G.초기설정();
-  const code = app.G.readSettings().entryCode;
+  const code = app.G.readSettings_().entryCode;
   const reg = (email, name, career) => { app.as(email); return plain(app.G.apiRegister(profile(name, career), code)); };
   return { ...app, code, reg };
 }
 
 test('초기설정 makes runner the admin', () => {
   const { G } = boot();
-  assert.deepEqual(plain(G.readSettings().adminEmails), [T]);
+  assert.deepEqual(plain(G.readSettings_().adminEmails), [T]);
 });
 
 test('outsider gets nothing', () => {
@@ -40,7 +40,7 @@ test('entry code flow', () => {
   assert.equal(plain(app.G.apiCheckCode('틀림')).data.valid, false);
   assert.equal(plain(app.G.apiCheckCode(' ' + app.code.toLowerCase() + ' ')).data.valid, true);
   assert.equal(app.G.apiRegister(profile('가학생'), '틀림').ok, false);
-  assert.equal(app.G.readAll().students.length, 0);
+  assert.equal(app.G.readAll_().students.length, 0);
   assert.equal(app.G.apiCareerView('의약·보건').ok, false);
   assert.equal(app.G.apiRegister(profile('가학생'), app.code).ok, true);
   assert.equal(plain(app.G.apiBootstrap()).data.state, 'student');
@@ -52,8 +52,8 @@ test('registered student can change career without code', () => {
   app.reg(A, '가학생');
   const r = plain(app.G.apiRegister({ ...profile('가학생'), career: '교육' }));
   assert.equal(r.ok, true);
-  assert.equal(app.G.readAll().students.length, 1);
-  assert.equal(app.G.readAll().students[0].career, '교육');
+  assert.equal(app.G.readAll_().students.length, 1);
+  assert.equal(app.G.readAll_().students[0].career, '교육');
 });
 
 test('essay visible to same-career friend', () => {
@@ -84,10 +84,10 @@ test("update other's essay rejected", () => {
   const id = plain(app.G.apiSubmitEssay(essay)).data.id;
   app.as(B);
   assert.deepEqual(plain(app.G.apiUpdateEssay(id, { ...essay, body: '나'.repeat(300) })), { ok: false, error: '내가 쓴 글만 고칠 수 있어요.' });
-  assert.equal(app.G.readAll().essays[0].body, essay.body);
+  assert.equal(app.G.readAll_().essays[0].body, essay.body);
   app.as(A);
   assert.equal(app.G.apiUpdateEssay(id, { ...essay, body: '다'.repeat(300) }).ok, true);
-  const e = app.G.readAll().essays[0];
+  const e = app.G.readAll_().essays[0];
   assert.equal(e.body, '다'.repeat(300));
   assert.ok(e.updatedAt);
   assert.equal(plain(app.G.apiEssayDetail(id)).data.essay.isMine, true);
@@ -127,7 +127,7 @@ test('student adds book', () => {
   const r = plain(app.G.apiAddBook({ title: '새 책', author: '저자', careers: ['교육'] }));
   assert.equal(r.ok, true);
   assert.match(r.data.id, /^U-/);
-  const b = app.G.readAll().books.find(x => x.id === r.data.id);
+  const b = app.G.readAll_().books.find(x => x.id === r.data.id);
   assert.equal(b.kind, '학생추가');
   assert.equal(app.G.apiSubmitEssay({ ...essay, bookId: r.data.id }).ok, true);
 });
@@ -160,4 +160,19 @@ test('doGet returns titled page with viewport', () => {
   assert.equal(out.name, 'index');
   assert.equal(out.title, '우리 진로 책장');
   assert.match(out.metas.viewport, /width=device-width/);
+});
+
+test('student text is stored literally, never as formula or number', () => {
+  const app = boot();
+  app.reg(A, '=학생!A3');
+  app.as(A);
+  const id = plain(app.G.apiSubmitEssay({ ...essay, question: '007', recReason: '+82 -1' })).data.id;
+  app.G.apiAddComment(id, "='독후감'!D7");
+  const db = app.G.readAll_();
+  assert.equal(db.students[0].name, '=학생!A3');
+  assert.equal(db.essays[0].question, '007');
+  assert.equal(db.essays[0].recReason, '+82 -1');
+  assert.equal(db.comments[0].body, "='독후감'!D7");
+  app.G.apiUpdateEssay(id, { ...essay, body: '=' + '가'.repeat(300) });
+  assert.equal(app.G.readAll_().essays[0].body, '=' + '가'.repeat(300));
 });
