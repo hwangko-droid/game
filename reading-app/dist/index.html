@@ -292,12 +292,15 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
   }
 
   // 책 찾기
+  // read365 학교 검색 주소(…/SchoolSearch?…)를 그 책의 검색 결과 주소(…/SchoolSearchResult?…&searchKeyword=제목)로 바꾼다
+  function libraryLink(base, title) {
+    base = String(base || '');
+    if (base.indexOf('/SchoolSearch?') < 0) return base;
+    return base.replace('/SchoolSearch?', '/SchoolSearchResult?') + '&searchKeyword=' + encodeURIComponent(title);
+  }
+
   function openLibrary(title) {
-    window.open(S.boot.libraryUrl, '_blank');
-    try {
-      if (navigator.clipboard) navigator.clipboard.writeText(title).catch(function () {});
-    } catch (e) {}
-    toast('책 제목을 복사했어요. 도서관 검색창에 붙여 넣으세요.');
+    window.open(libraryLink(S.boot.libraryUrl, title), '_blank');
   }
 
   function bookCard(b) {

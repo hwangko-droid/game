@@ -146,12 +146,13 @@ test('write form shows count and server error', async () => {
   await p.close();
 });
 
-test('library button opens library url', async () => {
+test('library button opens search results for the book', async () => {
   const p = await open({ token: 'TOK' });
   await p.click('nav button[data-tab="books"]');
   await p.locator('.lib-btn').first().click();
   await p.waitForTimeout(50);
-  assert.deepEqual(await p.evaluate(() => window.__opened), [LIB]);
+  assert.deepEqual(await p.evaluate(() => window.__opened),
+    ['https://read365.edunet.net/PureScreen/SchoolSearchResult?x=1&searchKeyword=' + encodeURIComponent('아픔이 길이 되려면')]);
   await p.close();
 });
 
