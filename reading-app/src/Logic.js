@@ -67,3 +67,44 @@ function isSchoolEmail(email) {
   var at = e.lastIndexOf('@');
   return at > 0 && e.slice(at + 1) === SCHOOL_DOMAIN;
 }
+
+/* ---------- 접근 판정 · 등록 ---------- */
+
+function ok_(data) { return { ok: true, data: data }; }
+function fail_(error) { return { ok: false, error: error }; }
+
+function isAdminEmail_(email, settings) {
+  var e = normEmail_(email);
+  return (settings.adminEmails || []).some(function (a) { return normEmail_(a) === e; });
+}
+
+function accessState(email, student, settings) {
+  if (!isSchoolEmail(email)) return 'outsider';
+  if (isAdminEmail_(email, settings)) return 'admin';
+  if (student) return 'student';
+  return settings.entryCodeOn ? 'needsCode' : 'needsProfile';
+}
+
+function checkEntryCode(input, settings) {
+  if (!settings.entryCodeOn) return true;
+  var a = String(input == null ? '' : input).trim().toLowerCase();
+  var b = String(settings.entryCode == null ? '' : settings.entryCode).trim().toLowerCase();
+  return a !== '' && a === b;
+}
+
+function intInRange_(v, lo, hi) {
+  var n = Number(v);
+  return String(v).trim() !== '' && Number.isInteger(n) && n >= lo && n <= hi ? n : null;
+}
+
+function validateProfile(p, settings) {
+  p = p || {};
+  var name = String(p.name == null ? '' : p.name).trim();
+  if (name.length < 1 || name.length > 20) return fail_('이름을 1~20자로 입력해 주세요.');
+  var classNo = intInRange_(p.classNo, 1, 15);
+  if (classNo === null) return fail_('반을 1~15 사이 숫자로 입력해 주세요.');
+  var number = intInRange_(p.number, 1, 40);
+  if (number === null) return fail_('번호를 1~40 사이 숫자로 입력해 주세요.');
+  if ((settings.careers || []).indexOf(p.career) < 0) return fail_('진로 분야를 목록에서 골라 주세요.');
+  return ok_({ name: name, classNo: classNo, number: number, career: p.career });
+}
