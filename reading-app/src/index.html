@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>우리 진로 책장</title>
+<style>
+:root {
+  --bg: #f6f1e7; --card: #fffdf8; --ink: #2b2620; --dim: #7a6f62; --line: #e4dccd;
+  --accent: #2f6b5a; --accent-ink: #ffffff; --peak: #8a4b2a; --bridge: #2f6b5a; --mine: #5b5a8f;
+  --warn: #b3412e; --soft: #efe7d8;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1915; --card: #24211c; --ink: #ece5d8; --dim: #a59a8a; --line: #3a352d;
+    --accent: #6fb39d; --accent-ink: #10221c; --peak: #e0a07a; --bridge: #6fb39d; --mine: #a9a8e0;
+    --warn: #f08a76; --soft: #2d2a24;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; font-size: 16px; line-height: 1.55; }
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+header h1 { font-size: 18px; margin: 0; letter-spacing: -0.02em; }
+header .who { font-size: 13px; color: var(--dim); }
+main { max-width: 720px; margin: 0 auto; padding: 16px 16px 96px; }
+nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--card); border-top: 1px solid var(--line); z-index: 5; }
+nav button { flex: 1; border: 0; background: none; padding: 10px 4px 14px; font: inherit; font-size: 13px; color: var(--dim); cursor: pointer; }
+nav button .ic { display: block; font-size: 20px; line-height: 1.2; }
+nav button.active { color: var(--accent); font-weight: 700; }
+h2 { font-size: 20px; margin: 4px 0 12px; letter-spacing: -0.02em; }
+h3 { font-size: 16px; margin: 20px 0 8px; color: var(--dim); font-weight: 600; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 0 0 12px; overflow-wrap: anywhere; }
+.card.click { cursor: pointer; }
+.reason { font-size: 18px; font-weight: 700; line-height: 1.45; margin: 2px 0 6px; }
+.meta { font-size: 13px; color: var(--dim); }
+.question { margin-top: 8px; padding: 8px 10px; background: var(--soft); border-radius: 10px; font-size: 14px; }
+.badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; margin-right: 6px; vertical-align: 2px; }
+.badge.봉우리 { color: var(--peak); } .badge.징검다리 { color: var(--bridge); } .badge.학생추가 { color: var(--mine); }
+.badge.hidden { color: var(--warn); }
+.book-title { font-size: 17px; font-weight: 700; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.friends { display: grid; gap: 8px; }
+.friend { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.friend:last-child { border-bottom: 0; }
+.friend b { white-space: nowrap; }
+label { display: block; font-size: 14px; color: var(--dim); margin: 12px 0 4px; }
+input, select, textarea { width: 100%; font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+textarea { min-height: 220px; resize: vertical; }
+.inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.inline input { flex: 1 1 140px; width: auto; }
+button.btn { font: inherit; border: 0; border-radius: 10px; padding: 10px 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; font-weight: 600; }
+button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button.small { padding: 6px 12px; font-size: 14px; }
+button:disabled { opacity: .5; cursor: default; }
+.error { color: var(--warn); font-size: 14px; margin: 8px 0; min-height: 1em; }
+.count { font-size: 13px; color: var(--dim); text-align: right; margin-top: 4px; }
+.count.short { color: var(--warn); }
+.empty { color: var(--dim); text-align: center; padding: 24px 8px; }
+.toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: calc(100% - 32px); z-index: 10; }
+.center { max-width: 420px; margin: 48px auto; text-align: center; }
+.links { font-size: 14px; margin-top: 8px; }
+.links a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.comment { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.body-text { white-space: pre-wrap; }
+details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips label { display: inline-flex; gap: 4px; align-items: center; margin: 0; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); }
+.chips input { width: auto; }
+</style>
+</head>
+<body>
+<header><h1>📚 우리 진로 책장</h1><div class="row"><span class="who" id="who"></span><span id="admin-slot"></span></div></header>
+<main id="view"><p class="empty">불러오는 중…</p></main>
+<nav id="nav" hidden></nav>
+<script>
+(function () {
+  'use strict';
+
+  // ---------- 서버 호출 ----------
+  function call(name) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      var r = google.script.run.withSuccessHandler(function (res) {
+        if (res && res.ok) resolve(res.data); else reject(new Error(res && res.error ? res.error : '알 수 없는 오류'));
+      }).withFailureHandler(function (e) { reject(new Error('서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.')); });
+      r[name].apply(r, args);
+    });
+  }
+
+  // ---------- DOM 도우미 (학생 입력은 항상 textContent) ----------
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v == null || v === false) return;
+      if (k === 'class') el.className = v;
+      else if (k === 'text') el.textContent = v;
+      else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v);
+      else if (k === 'value') el.value = v;
+      else el.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, c) {
+    if (c == null || c === false) return;
+    if (Array.isArray(c)) { c.forEach(function (x) { add(el, x); }); return; }
+    el.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
+  }
+  function $(id) { return document.getElementById(id); }
+  function show(node) { var v = $('view'); v.textContent = ''; add(v, node); window.scrollTo(0, 0); }
+  function toast(msg) {
+    var t = h('div', { class: 'toast', text: msg });
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+  function fmtDate(iso) { return iso ? String(iso).slice(0, 10).replace(/-/g, '.') : ''; }
+  function careerSelect(id, value, careers) {
+    return h('select', { id: id }, careers.map(function (c) { var o = h('option', { value: c, text: c }); if (c === value) o.selected = true; return o; }));
+  }
+  function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function load(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+
+  // ---------- 상태 ----------
+  var S = { boot: null, tab: 'career', career: null, code: '', books: null };
+  var TABS = [['career', '🧭', '우리 진로'], ['books', '📖', '책 찾기'], ['write', '✍️', '독후감 쓰기'], ['mine', '🗂️', '내 기록']];
+
+  function start() {
+    call('apiBootstrap').then(function (b) {
+      S.boot = b;
+      if (b.state === 'outsider') return showOutsider();
+      if (b.state === 'needsCode') return showCode();
+      if (b.state === 'needsProfile' || (b.state === 'admin' && !b.me)) return showProfile();
+      enterApp();
+    }).catch(function (e) { show(h('p', { class: 'empty', text: e.message })); });
+  }
+
+  function showOutsider() {
+    show(h('div', { class: 'center' },
+      h('h2', { text: '들어올 수 없어요' }),
+      h('p', { text: '이 앱은 호남고 1학년 진로 수업용입니다.' }),
+      h('p', { class: 'meta', text: '학교 계정(@ai.jbedu.kr)으로 로그인했는지 확인해 주세요.' })));
+  }
+
+  function showCode() {
+    var err = h('div', { class: 'error', id: 'code-error' });
+    var input = h('input', { id: 'code-input', placeholder: '선생님이 알려 준 입장 코드', autocomplete: 'off' });
+    function submit() {
+      err.textContent = '';
+      call('apiCheckCode', input.value).then(function (r) {
+        if (!r.valid) { err.textContent = '입장 코드가 맞지 않아요. 다시 확인해 주세요.'; return; }
+        S.code = input.value;
+        showProfile();
+      }).catch(function (e) { err.textContent = e.message; });
+    }
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    show(h('div', { class: 'center' },
+      h('h2', { text: '입장 코드' }),
+      h('p', { class: 'meta', text: '처음 한 번만 입력하면 돼요.' }),
+      input, err,
+      h('button', { class: 'btn', id: 'code-submit', onclick: submit, text: '확인' })));
+  }
+
+  function showProfile(isEdit) {
+    var me = (S.boot && S.boot.me) || {};
+    var careers = S.boot.careers || [];
+    var err = h('div', { class: 'error' });
+    var btn = h('button', { class: 'btn', id: 'profile-submit', text: isEdit ? '저장' : '시작하기' });
+    btn.onclick = function () {
+      err.textContent = ''; btn.disabled = true;
+      var p = { name: $('profile-name').value, classNo: $('profile-class').value, number: $('profile-number').value, career: $('profile-career').value };
+      call('apiRegister', p, S.code).then(function () {
+        S.career = null; S.books = null;
+        return call('apiBootstrap');
+      }).then(function (b) { S.boot = b; enterApp(isEdit ? 'mine' : 'career'); })
+        .catch(function (e) { err.textContent = e.message; btn.disabled = false; });
+    };
+    show(h('div', { class: 'center', style: 'text-align:left' },
+      h('h2', { text: isEdit ? '내 정보 바꾸기' : '나를 소개해 주세요' }),
+      h('p', { class: 'meta', text: '같은 학년 친구들에게 이름과 반, 진로 분야가 보여요.' }),
+      h('label', { for: 'profile-name', text: '이름' }), h('input', { id: 'profile-name', value: me.name || '', maxlength: 20 }),
+      h('div', { class: 'row', style: 'flex-wrap:nowrap' },
+        h('div', { style: 'flex:1' }, h('label', { for: 'profile-class', text: '반' }), h('input', { id: 'profile-class', type: 'number', min: 1, max: 15, value: me.classNo || '' })),
+        h('div', { style: 'flex:1' }, h('label', { for: 'profile-number', text: '번호' }), h('input', { id: 'profile-number', type: 'number', min: 1, max: 40, value: me.number || '' }))),
+      h('label', { for: 'profile-career', text: '진로 분야' }), careerSelect('profile-career', me.career, careers),
+      err, btn,
+      isEdit ? h('button', { class: 'btn ghost', style: 'margin-left:8px', onclick: function () { enterApp('mine'); }, text: '취소' }) : null));
+  }
+
+  // ---------- 앱 ----------
+  function enterApp(tab) {
+    var b = S.boot;
+    $('who').textContent = b.me ? b.me.name + ' · ' + b.me.classNo + '반' : (b.isAdmin ? '선생님' : '');
+    var slot = $('admin-slot'); slot.textContent = '';
+    if (b.isAdmin) slot.appendChild(h('button', { class: 'btn ghost small', id: 'admin-btn', onclick: showAdmin, text: '관리' }));
+    var nav = $('nav'); nav.textContent = ''; nav.hidden = false;
+    TABS.forEach(function (t) {
+      nav.appendChild(h('button', { 'data-tab': t[0], onclick: function () { go(t[0]); } }, h('span', { class: 'ic', text: t[1] }), t[2]));
+    });
+    go(tab || 'career');
+  }
+
+  function go(tab, arg) {
+    S.tab = tab;
+    Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
+    ({ career: viewCareer, books: viewBooks, write: viewWrite, mine: viewMine })[tab](arg);
+  }
+
+  function loading() { show(h('p', { class: 'empty', text: '불러오는 중…' })); }
+  function failed(e) { show(h('p', { class: 'empty', text: e.message })); }
+
+  function essayCard(c) {
+    return h('div', { class: 'card click essay-card', onclick: function () { viewDetail(c.id); } },
+      h('div', { class: 'meta' }, c.hidden ? h('span', { class: 'badge hidden', text: '숨김' }) : null, '『' + c.bookTitle + '』'),
+      h('div', { class: 'meta', text: '이 책을 ' + c.recTarget + ' 친구에게 권해요' }),
+      h('div', { class: 'reason', text: c.recReason }),
+      h('div', { class: 'meta', text: '— ' + c.authorName + ' (' + c.authorClass + '반 · ' + c.career + ')  ·  댓글 ' + c.commentCount }),
+      c.question ? h('div', { class: 'question', text: '❓ ' + c.question }) : null);
+  }
+
+  // 우리 진로
+  function viewCareer() {
+    var careers = S.boot.careers || [];
+    var career = S.career || (S.boot.me && S.boot.me.career) || careers[0];
+    loading();
+    call('apiCareerView', career).then(function (v) {
+      var sel = careerSelect('career-select', career, careers);
+      sel.onchange = function () { S.career = sel.value; viewCareer(); };
+      var friends = v.friends.length ? h('div', { class: 'friends' }, v.friends.map(function (f) {
+        return h('div', { class: 'friend' }, h('b', { text: f.name }), h('span', { class: 'meta', text: f.classNo + '반' }),
+          h('span', { text: f.bookTitles.length ? f.bookTitles.map(function (t) { return '『' + t + '』'; }).join(' ') : '아직 읽는 중' }));
+      })) : h('p', { class: 'empty', text: '아직 이 분야 친구가 없어요.' });
+      show([
+        h('h2', null, '같은 진로 친구들'),
+        sel,
+        h('h3', { text: v.career + ' · ' + v.friends.length + '명' }),
+        h('div', { class: 'card' }, friends),
+        h('h3', { text: '친구들이 남긴 추천' }),
+        v.recentEssays.length ? v.recentEssays.map(essayCard) : h('p', { class: 'empty', text: '아직 올라온 독후감이 없어요. 첫 번째가 되어 보세요!' })
+      ]);
+    }).catch(failed);
+  }
+
+  // 책 찾기
+  function openLibrary(title) {
+    window.open(S.boot.libraryUrl, '_blank');
+    try {
+      if (navigator.clipboard) navigator.clipboard.writeText(title).catch(function () {});
+    } catch (e) {}
+    toast('책 제목을 복사했어요. 도서관 검색창에 붙여 넣으세요.');
+  }
+
+  function bookCard(b) {
+    var readers = Object.keys(b.readersByCareer).map(function (k) { return k + ' ' + b.readersByCareer[k]; }).join(' · ');
+    return h('div', { class: 'card book-card' },
+      h('div', null, h('span', { class: 'badge ' + b.kind, text: b.kind }), h('span', { class: 'book-title', text: b.title })),
+      h('div', { class: 'meta', text: b.author + (b.source ? ' · ' + b.source : '') }),
+      b.intro ? h('p', { text: b.intro }) : null,
+      h('div', { class: 'meta', text: b.readerCount ? '친구 ' + b.readerCount + '명이 읽음 (' + readers + ')' : '아직 읽은 친구가 없어요' }),
+      b.topReason ? h('div', { class: 'question', style: 'cursor:pointer', onclick: function () { viewDetail(b.topReason.id); } },
+        '“' + b.topReason.recReason + '” — ' + b.topReason.authorName) : null,
+      b.peak ? h('div', { class: 'links' }, '⛰️ 다 읽으면 봉우리로: ', h('a', { text: '『' + b.peak.title + '』', onclick: function () { searchBooks(b.peak.title); } })) : null,
+      b.bridges.length ? h('div', { class: 'links' }, '🪨 먼저 건너 볼 징검다리: ', b.bridges.map(function (x, i) {
+        return [i ? ', ' : '', h('a', { text: '『' + x.title + '』', onclick: function () { searchBooks(x.title); } })];
+      })) : null,
+      h('div', { class: 'row', style: 'margin-top:10px' },
+        h('button', { class: 'btn ghost small lib-btn', onclick: function () { openLibrary(b.title); }, text: '📍 우리 도서관에서 찾기' }),
+        h('button', { class: 'btn small', onclick: function () { go('write', { bookId: b.id }); }, text: '이 책으로 독후감 쓰기' })));
+  }
+
+  var bookFilter = { career: '', q: '' };
+  function searchBooks(q) { bookFilter = { career: '', q: q }; go('books'); }
+
+  function viewBooks() {
+    var careers = S.boot.careers || [];
+    var sel = h('select', { id: 'books-career' }, h('option', { value: '', text: '모든 진로' }),
+      careers.map(function (c) { var o = h('option', { value: c, text: c }); if (c === bookFilter.career) o.selected = true; return o; }));
+    var q = h('input', { id: 'books-q', placeholder: '제목·저자 검색', value: bookFilter.q });
+    var list = h('div', null, h('p', { class: 'empty', text: '불러오는 중…' }));
+    function refresh() {
+      bookFilter = { career: sel.value, q: q.value };
+      call('apiBookCards', bookFilter).then(function (cards) {
+        list.textContent = '';
+        add(list, cards.length ? cards.map(bookCard) : h('p', { class: 'empty', text: '찾는 책이 없어요. 아래에서 직접 추가할 수 있어요.' }));
+      }).catch(function (e) { list.textContent = e.message; });
+    }
+    sel.onchange = refresh;
+    var timer;
+    q.oninput = function () { clearTimeout(timer); timer = setTimeout(refresh, 300); };
+    show([h('h2', { text: '책 찾기' }), h('div', { class: 'inline' }, sel, q), h('div', { style: 'height:12px' }), list, addBookForm(careers)]);
+    refresh();
+  }
+
+  function addBookForm(careers) {
+    var err = h('div', { class: 'error' });
+    var title = h('input', { placeholder: '책 제목', maxlength: 100 });
+    var author = h('input', { placeholder: '저자', maxlength: 60 });
+    var chips = h('div', { class: 'chips' }, careers.map(function (c) {
+      return h('label', null, h('input', { type: 'checkbox', value: c }), c);
+    }));
+    var btn = h('button', { class: 'btn small', text: '추가하기' });
+    btn.onclick = function () {
+      err.textContent = '';
+      var cs = Array.prototype.filter.call(chips.querySelectorAll('input'), function (i) { return i.checked; }).map(function (i) { return i.value; });
+      call('apiAddBook', { title: title.value, author: author.value, careers: cs }).then(function (r) {
+        toast('책을 추가했어요.');
+        S.books = null;
+        go('write', { bookId: r.id });
+      }).catch(function (e) { err.textContent = e.message; });
+    };
+    return h('details', { class: 'card' }, h('summary', { text: '목록에 없는 책 추가하기' }),
+      h('label', { text: '제목' }), title, h('label', { text: '저자' }), author,
+      h('label', { text: '어떤 진로 친구에게 어울릴까요? (여러 개 가능)' }), chips, err, btn);
+  }
+
+  // 독후감 쓰기 (arg: {bookId} 또는 {edit: essay})
+  function viewWrite(arg) {
+    arg = arg || {};
+    var edit = arg.edit || null;
+    loading();
+    call('apiBookCards', {}).then(function (books) {
+      var draft = edit ? null : (load('draft') || {});
+      var bookId = edit ? edit.bookId : (arg.bookId || draft.bookId || '');
+      var min = S.boot.minBodyChars || 0;
+      var sel = h('select', { id: 'write-book' }, h('option', { value: '', text: '— 책을 골라 주세요 —' }),
+        books.map(function (b) { var o = h('option', { value: b.id, text: b.title + ' / ' + b.author }); if (b.id === bookId) o.selected = true; return o; }));
+      var body = h('textarea', { id: 'write-body', placeholder: '읽으며 떠오른 생각, 내 진로와 이어진 지점, 마음에 남은 문장…' });
+      body.value = edit ? edit.body : (draft.body || '');
+      var count = h('div', { class: 'count', id: 'write-count' });
+      var target = h('input', { id: 'write-target', maxlength: 200, value: edit ? edit.recTarget : (draft.recTarget || ''), placeholder: '예: 간호사를 꿈꾸는' });
+      var reason = h('input', { id: 'write-reason', maxlength: 200, value: edit ? edit.recReason : (draft.recReason || ''), placeholder: '이 책을 권하는 이유 한 줄' });
+      var question = h('input', { id: 'write-question', maxlength: 200, value: edit ? edit.question : (draft.question || ''), placeholder: '(선택) 같은 진로 친구에게 묻고 싶은 것' });
+      var err = h('div', { class: 'error', id: 'write-error' });
+      var btn = h('button', { class: 'btn', id: 'write-submit', text: edit ? '고친 내용 저장' : '올리기' });
+      function data() { return { bookId: sel.value, body: body.value, recTarget: target.value, recReason: reason.value, question: question.value }; }
+      function update() {
+        var n = body.value.trim().length;
+        count.textContent = n + ' / 최소 ' + min + '자';
+        count.classList.toggle('short', n < min);
+        if (!edit) store('draft', data());
+      }
+      [sel, body, target, reason, question].forEach(function (el) { el.addEventListener('input', update); el.addEventListener('change', update); });
+      update();
+      btn.onclick = function () {
+        err.textContent = ''; btn.disabled = true;
+        var p = edit ? call('apiUpdateEssay', edit.id, data()) : call('apiSubmitEssay', data());
+        p.then(function (r) {
+          if (!edit) store('draft', null);
+          toast(edit ? '고쳤어요.' : '독후감을 올렸어요!');
+          viewDetail(r.id);
+        }).catch(function (e) { err.textContent = e.message; btn.disabled = false; });
+      };
+      show([
+        h('h2', { text: edit ? '독후감 고치기' : '독후감 쓰기' }),
+        h('label', { for: 'write-book', text: '읽은 책' }), sel,
+        h('label', { for: 'write-body', text: '감상' }), body, count,
+        h('label', { for: 'write-target', text: '이 책을 ___ 친구에게 권한다' }), target,
+        h('label', { for: 'write-reason', text: '왜냐하면' }), reason,
+        h('label', { for: 'write-question', text: '같은 진로 친구에게 묻고 싶은 것' }), question,
+        err, btn
+      ]);
+    }).catch(failed);
+  }
+
+  // 독후감 상세
+  function viewDetail(id) {
+    loading();
+    call('apiEssayDetail', id).then(function (d) {
+      if (!d) { show(h('p', { class: 'empty', text: '볼 수 없는 글이에요.' })); return; }
+      var e = d.essay, isAdmin = S.boot.isAdmin;
+      var input = h('input', { id: 'comment-input', maxlength: 500, placeholder: '실명으로 댓글을 남겨요' });
+      var err = h('div', { class: 'error' });
+      function send() {
+        err.textContent = '';
+        call('apiAddComment', e.id, input.value).then(function () { viewDetail(e.id); }).catch(function (x) { err.textContent = x.message; });
+      }
+      input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') send(); });
+      function hideBtn(tab, itemId, hidden) {
+        return isAdmin ? h('button', { class: 'btn ghost small', text: hidden ? '보이기' : '숨기기', onclick: function () {
+          call('apiSetHidden', tab, itemId, !hidden).then(function () { viewDetail(e.id); }).catch(function (x) { toast(x.message); });
+        } }) : null;
+      }
+      show([
+        h('button', { class: 'btn ghost small', onclick: function () { go(S.tab); }, text: '← 돌아가기' }),
+        h('div', { class: 'card', style: 'margin-top:12px' },
+          h('div', { class: 'meta' }, e.hidden ? h('span', { class: 'badge hidden', text: '숨김' }) : null, '『' + e.bookTitle + '』'),
+          h('div', { class: 'meta', text: e.authorName + ' (' + e.authorClass + '반 · ' + e.career + ') · ' + fmtDate(e.createdAt) + (e.updatedAt ? ' (수정됨)' : '') }),
+          h('p', { class: 'body-text', text: e.body }),
+          h('div', { class: 'meta', text: '이 책을 ' + e.recTarget + ' 친구에게 권해요' }),
+          h('div', { class: 'reason', text: e.recReason }),
+          e.question ? h('div', { class: 'question', text: '❓ ' + e.question }) : null,
+          h('div', { class: 'row', style: 'margin-top:10px' },
+            e.isMine ? h('button', { class: 'btn ghost small', text: '고치기', onclick: function () { go('write', { edit: e }); } }) : null,
+            hideBtn('독후감', e.id, e.hidden))),
+        h('h3', { text: '댓글 ' + d.comments.length }),
+        d.comments.map(function (c) {
+          return h('div', { class: 'comment' },
+            h('div', { class: 'meta' }, c.hidden ? h('span', { class: 'badge hidden', text: '숨김' }) : null, c.authorName + ' (' + c.authorClass + '반) · ' + fmtDate(c.createdAt)),
+            h('div', { class: 'body-text', text: c.body }), hideBtn('댓글', c.id, c.hidden));
+        }),
+        h('div', { class: 'inline', style: 'margin-top:12px' }, input, h('button', { class: 'btn small', onclick: send, text: '남기기' })),
+        err
+      ]);
+    }).catch(failed);
+  }
+
+  // 내 기록
+  function viewMine() {
+    loading();
+    call('apiMyRecords').then(function (r) {
+      var me = S.boot.me;
+      show([
+        h('h2', { text: '내 기록' }),
+        me ? h('div', { class: 'card' }, h('b', { text: me.name }), ' ', h('span', { class: 'meta', text: me.classNo + '반 ' + me.number + '번 · ' + me.career }),
+          h('div', { style: 'margin-top:8px' }, h('button', { class: 'btn ghost small', text: '내 정보·진로 바꾸기', onclick: function () { showProfile(true); } }))) : null,
+        h('h3', { text: '내가 쓴 독후감 ' + r.essays.length + '편' }),
+        r.essays.length ? r.essays.map(essayCard) : h('p', { class: 'empty', text: '아직 쓴 독후감이 없어요.' }),
+        h('h3', { text: '내 글에 달린 댓글' }),
+        r.commentsOnMine.length ? r.commentsOnMine.map(function (c) {
+          return h('div', { class: 'card click', onclick: function () { viewDetail(c.essayId); } },
+            h('div', { class: 'meta', text: '『' + c.bookTitle + '』 · ' + c.authorName + ' · ' + fmtDate(c.createdAt) }), h('div', { text: c.body }));
+        }) : h('p', { class: 'empty', text: '아직 댓글이 없어요.' })
+      ]);
+    }).catch(failed);
+  }
+
+  // 관리
+  function showAdmin() {
+    Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) { b.classList.remove('active'); });
+    loading();
+    call('apiAdminSummary').then(function (classes) {
+      show([
+        h('h2', { text: '반별 제출 현황' }),
+        h('p', { class: 'meta', text: '글·댓글 숨기기는 각 독후감 화면에서 할 수 있어요. 자세한 내용은 구글 시트의 "독후감" 탭에서 보세요.' }),
+        classes.length ? classes.map(function (c) {
+          return h('div', { class: 'card' }, h('b', { text: c.classNo + '반 (' + c.students.length + '명)' }),
+            h('table', null, h('tr', null, h('th', { text: '번호' }), h('th', { text: '이름' }), h('th', { text: '독후감' }), h('th', { text: '댓글' })),
+              c.students.map(function (s) {
+                return h('tr', null, h('td', { text: s.number }), h('td', { text: s.name }), h('td', { text: s.essayCount }), h('td', { text: s.commentCount }));
+              })));
+        }) : h('p', { class: 'empty', text: '아직 등록한 학생이 없어요.' })
+      ]);
+    }).catch(failed);
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
