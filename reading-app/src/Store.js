@@ -23,10 +23,11 @@ function setupSpreadsheet_() {
       sh = ss.insertSheet(tab);
       sh.appendRow(HEADERS[tab]);
       if (sh.setFrozenRows) sh.setFrozenRows(1);
-      if (tab === '도서') SEED_BOOKS.forEach(function (b) { sh.appendRow(objectToRow_('도서', b)); });
-      if (tab === '질문') SEED_QUESTIONS.forEach(function (q) { sh.appendRow(objectToRow_('질문', q)); });
     }
   });
+  // 기본 책·질문 중 시트에 없는 것만 더한다(다시 실행해도 선생님이 고친 내용은 그대로)
+  addMissing_('도서', SEED_BOOKS);
+  addMissing_('질문', SEED_QUESTIONS);
   var sh = ss.getSheetByName('설정');
   var have = {};
   dataRows_('설정').forEach(function (r) { have[String(r[0])] = true; });
@@ -40,6 +41,13 @@ function setupSpreadsheet_() {
 
 function isExplicitFalse_(v) {
   return v === false || String(v == null ? '' : v).trim().toUpperCase() === 'FALSE';
+}
+
+function addMissing_(tab, seeds) {
+  var have = {};
+  dataRows_(tab).forEach(function (r) { have[String(r[0])] = true; });
+  var sh = sheet_(tab);
+  seeds.forEach(function (x) { if (!have[x.id]) sh.appendRow(objectToRow_(tab, x)); });
 }
 
 function readSettings_() {

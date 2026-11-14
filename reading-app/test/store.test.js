@@ -79,7 +79,10 @@ test('seed books consistent', () => {
     for (const c of b.careers) assert.ok(G.SEED_CAREERS.includes(c), `${b.title}: ${c}`);
     if (b.peakId) assert.equal(G.SEED_BOOKS.find(x => x.id === b.peakId).kind, '봉우리', b.title);
   }
-  assert.equal(G.SEED_BOOKS.length, 22);
+  assert.ok(G.SEED_BOOKS.length >= 55, 'books: ' + G.SEED_BOOKS.length);
+  assert.ok(G.SEED_BOOKS.filter(b => b.level === '가볍게').length >= 25, 'easy books');
+  const titles = G.SEED_BOOKS.map(b => b.title);
+  assert.equal(new Set(titles).size, titles.length, 'duplicate titles');
   assert.equal(G.SEED_BOOKS.filter(b => b.source === '서울대 권장도서 100선').length, 9);
 });
 
@@ -106,4 +109,18 @@ test('seed questions linked to books, every book has a level', () => {
     for (const q of b.questions) assert.ok(ids.has(q), `${b.title}: ${q}`);
   }
   for (const q of qs) assert.ok(G.readAll_().books.some(b => b.questions.includes(q.id)), q.text);
+});
+
+test('re-running setup adds only missing seed books', () => {
+  const { G, ss } = setup();
+  G.setupSpreadsheet_();
+  // 선생님이 고친 책과 지운 책이 있는 상태
+  ss._sheets['도서'].splice(2, 1);                // 두 번째 책 삭제
+  ss._sheets['도서'][1][6] = '선생님 소개';         // 첫 책 소개 수정
+  ss._sheets['도서'].push(['U-1', '학생 책', '누군가', '학생추가', '교육', '', '', '', '', '']);
+  G.setupSpreadsheet_();
+  const books = G.readAll_().books;
+  assert.equal(books.length, G.SEED_BOOKS.length + 1);
+  assert.equal(books[0].intro, '선생님 소개');
+  assert.equal(new Set(books.map(b => b.id)).size, books.length);
 });

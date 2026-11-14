@@ -205,7 +205,8 @@ test('recommend returns matched books with reasons', () => {
   const r = plain(app.G.apiRecommend(a));
   assert.equal(r.ok, true);
   assert.ok(r.data.length >= 1 && r.data.length <= 6);
-  assert.equal(r.data[0].title, '정의란 무엇인가');
+  assert.equal(r.data[0].match.score, 5); // 질문 3 + 진로 1 + 난이도 1
+  assert.ok(r.data.some(b => b.title === '정의란 무엇인가'));
   assert.ok(r.data[0].match.questions[0].includes('공정'));
   assert.equal(app.G.apiRecommend('').ok, false);
 });
