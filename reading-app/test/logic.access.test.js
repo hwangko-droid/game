@@ -5,29 +5,25 @@ const { loadGs } = require('./load');
 const L = loadGs(['Logic.js']);
 
 const CAREERS = ['의약·보건','공학·IT','자연과학','교육','법·행정·정치','경영·경제','인문·언어','사회·심리','미디어·예술','아직 모르겠음'];
-const s = { careers: CAREERS, entryCodeOn: true, entryCode: 'HN2026', minBodyChars: 300, adminEmails: ['t@ai.jbedu.kr'] };
-const stu = { email: 'kim@ai.jbedu.kr', name: '김가' };
+const s = { careers: CAREERS, entryCodeOn: true, entryCode: '2027', minBodyChars: 300, adminPassword: '관리1234' };
+const stu = { sid: '2-07', name: '김가', token: 'TOK' };
 
-test('outsider for non-school or empty email', () => {
-  assert.equal(L.accessState_('x@gmail.com', null, s), 'outsider');
-  assert.equal(L.accessState_('', null, s), 'outsider');
+test('admin password token is admin', () => {
+  assert.equal(L.accessState_('관리1234', null, s), 'admin');
 });
-test('admin case-insensitive, regardless of registration', () => {
-  assert.equal(L.accessState_('T@ai.jbedu.kr', null, s), 'admin');
-  assert.equal(L.accessState_('t@ai.jbedu.kr', stu, s), 'admin');
+test('empty admin password never matches', () => {
+  assert.equal(L.accessState_('', null, { ...s, adminPassword: '' }), 'login');
 });
-test('unregistered needs code when on, profile when off', () => {
-  assert.equal(L.accessState_('kim@ai.jbedu.kr', null, s), 'needsCode');
-  assert.equal(L.accessState_('kim@ai.jbedu.kr', null, { ...s, entryCodeOn: false }), 'needsProfile');
+test('known student token is student, otherwise login', () => {
+  assert.equal(L.accessState_('TOK', stu, s), 'student');
+  assert.equal(L.accessState_('', null, s), 'login');
+  assert.equal(L.accessState_('nope', null, s), 'login');
 });
-test('registered is student', () => {
-  assert.equal(L.accessState_('kim@ai.jbedu.kr', stu, s), 'student');
-});
-test('checkEntryCode trims and ignores case', () => {
-  assert.equal(L.checkEntryCode_('  hn2026 ', s), true);
-  assert.equal(L.checkEntryCode_('hn2025', s), false);
+test('checkEntryCode trims and ignores case; numeric code from sheet', () => {
+  assert.equal(L.checkEntryCode_(' 2027 ', s), true);
+  assert.equal(L.checkEntryCode_('2026', s), false);
   assert.equal(L.checkEntryCode_('', s), false);
-  assert.equal(L.checkEntryCode_(undefined, s), false);
+  assert.equal(L.checkEntryCode_('2027', { ...s, entryCode: 2027 }), true);
   assert.equal(L.checkEntryCode_('', { ...s, entryCodeOn: false }), true);
 });
 test('validateProfile_', () => {

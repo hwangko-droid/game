@@ -14,7 +14,7 @@ test('bundle produces a single runnable Code.gs and index.html', () => {
   for (const bad of ['require(', 'module.exports', 'import ']) assert.ok(!gs.includes(bad), bad);
   const ctx = vm.createContext({});
   vm.runInContext(gs, ctx);
-  for (const fn of ['doGet', 'apiBootstrap', 'setupSpreadsheet_', '초기설정', 'apiRegister', 'careerView_']) {
+  for (const fn of ['doGet', 'apiBootstrap', 'setupSpreadsheet_', '초기설정', 'apiLogin', 'careerView_']) {
     assert.equal(typeof ctx[fn], 'function', fn);
   }
   assert.ok(gs.indexOf('Logic.js') < gs.indexOf('Code.js'));

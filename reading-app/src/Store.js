@@ -15,7 +15,7 @@ function dataRows_(tab) {
   return values.slice(1).filter(function (r) { return r.some(function (c) { return c !== '' && c != null; }); });
 }
 
-function setupSpreadsheet_(adminEmail) {
+function setupSpreadsheet_() {
   var ss = getSs_();
   TABS_.forEach(function (tab) {
     var sh = ss.getSheetByName(tab);
@@ -32,7 +32,7 @@ function setupSpreadsheet_(adminEmail) {
   Object.keys(SEED_SETTINGS).forEach(function (k) {
     if (have[k]) return;
     var v = SEED_SETTINGS[k];
-    if (k === '관리자이메일') v = adminEmail || '';
+    if (k === '관리자비밀번호') v = '관리' + String(1000 + Math.floor(Math.random() * 9000));
     sh.appendRow([k, v]);
   });
 }
@@ -50,7 +50,7 @@ function readSettings_() {
     entryCodeOn: !isExplicitFalse_(kv['입장코드사용']),  // 분명히 FALSE일 때만 끈다
     entryCode: String(kv['입장코드'] == null ? '' : kv['입장코드']).trim(),
     minBodyChars: kv['감상최소글자'] === '' || kv['감상최소글자'] == null ? 300 : Number(kv['감상최소글자']),
-    adminEmails: splitList_(kv['관리자이메일']),
+    adminPassword: String(kv['관리자비밀번호'] == null ? '' : kv['관리자비밀번호']).trim(),
     libraryUrl: String(kv['도서관링크'] || SEED_SETTINGS['도서관링크']),
     schoolYear: String(kv['학년도'] == null ? '' : kv['학년도'])
   };
@@ -68,9 +68,9 @@ function appendRow_(tab, obj) {
 function updateRowById_(tab, id, patch) {
   var sh = sheet_(tab);
   var values = sh.getDataRange().getValues();
-  var key = tab === '학생' ? normEmail_(id) : String(id);
+  var key = String(id);
   for (var i = 1; i < values.length; i++) {
-    var cell = tab === '학생' ? normEmail_(values[i][0]) : String(values[i][0]);
+    var cell = String(values[i][0]);
     if (cell !== key) continue;
     var obj = rowToObject_(tab, values[i]);
     Object.keys(patch).forEach(function (k) { obj[k] = patch[k]; });

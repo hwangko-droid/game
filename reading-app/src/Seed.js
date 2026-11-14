@@ -7,7 +7,7 @@ var SEED_SETTINGS = {
   '입장코드사용': 'TRUE',
   '입장코드': '2027',        // 선생님이 정한 입장 비밀번호
   '감상최소글자': 300,
-  '관리자이메일': '',        // setupSpreadsheet가 실행자 이메일로 채움
+  '관리자비밀번호': '',      // setupSpreadsheet가 '관리'+4자리로 생성
   '도서관링크': 'https://read365.edunet.net/PureScreen/SchoolSearch?schoolName=%ED%98%B8%EB%82%A8%EA%B3%A0%EB%93%B1%ED%95%99%EA%B5%90&provCode=P10&neisCode=P100000464',
   '학년도': '2026'
 };

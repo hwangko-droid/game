@@ -20,10 +20,10 @@ test('book careers split and joined', () => {
 
 test('round trip every tab', () => {
   const samples = {
-    '학생': { email:'a@ai.jbedu.kr', name:'김가', classNo:3, number:7, career:'교육', joinedAt:'2026-11-14T00:00:00.000Z' },
+    '학생': { sid:'3-07', name:'김가', classNo:3, number:7, career:'교육', joinedAt:'2026-11-14T00:00:00.000Z', token:'tok' },
     '도서': { id:'P01', title:'코스모스', author:'칼 세이건', kind:'봉우리', careers:['자연과학'], peakId:'', intro:'', source:'x' },
-    '독후감': { id:'E-1', email:'a@ai.jbedu.kr', bookId:'P01', body:'b', recTarget:'t', recReason:'r', question:'', createdAt:'c', updatedAt:'u', hidden:false },
-    '댓글': { id:'C-1', essayId:'E-1', email:'a@ai.jbedu.kr', body:'hi', createdAt:'c', hidden:true },
+    '독후감': { id:'E-1', sid:'a@ai.jbedu.kr', bookId:'P01', body:'b', recTarget:'t', recReason:'r', question:'', createdAt:'c', updatedAt:'u', hidden:false },
+    '댓글': { id:'C-1', essayId:'E-1', sid:'a@ai.jbedu.kr', body:'hi', createdAt:'c', hidden:true },
   };
   for (const [tab, o] of Object.entries(samples)) {
     assert.deepEqual(plain(L.rowToObject_(tab, L.objectToRow_(tab, o).map(sheetCoerce))), o, tab);
@@ -31,18 +31,19 @@ test('round trip every tab', () => {
 });
 
 test('HEADERS order', () => {
-  assert.deepEqual(plain(L.HEADERS['독후감']), ['독후감ID','이메일','도서ID','감상','추천대상','추천이유','질문','작성일','수정일','숨김']);
+  assert.deepEqual(plain(L.HEADERS['독후감']), ['독후감ID','학생ID','도서ID','감상','추천대상','추천이유','질문','작성일','수정일','숨김']);
   assert.deepEqual(plain(L.HEADERS['설정']), ['키','값']);
 });
 
-test('isSchoolEmail_', () => {
-  assert.equal(L.isSchoolEmail_('kim@ai.jbedu.kr'), true);
-  assert.equal(L.isSchoolEmail_(''), false);
-  assert.equal(L.isSchoolEmail_(null), false);
-  assert.equal(L.isSchoolEmail_('kim@gmail.com'), false);
-  assert.equal(L.isSchoolEmail_('kim@ai.jbedu.kr.evil.com'), false);
-  assert.equal(L.isSchoolEmail_('@ai.jbedu.kr'), false);
-  assert.equal(L.isSchoolEmail_(' KIM@AI.JBEDU.KR '), true);
+test('studentId_ is class-number with two-digit number', () => {
+  assert.equal(L.studentId_(2, 7), '2-07');
+  assert.equal(L.studentId_(11, 30), '11-30');
+});
+
+test('student row carries token', () => {
+  const st = L.rowToObject_('학생', ['2-07', '김가', 2, 7, '교육', 't', 'TOK']);
+  assert.equal(st.token, 'TOK');
+  assert.deepEqual(plain(L.HEADERS['학생']), ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키']);
 });
 
 test('newId unique and shaped', () => {

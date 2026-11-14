@@ -64,10 +64,10 @@ module.exports.sheetCoerce = sheetCoerce;
 // ---- 앱 전체 로드 (가짜 Session/Lock/Html 포함) ----
 function loadApp() {
   const f = fakeSpreadsheet();
-  const state = { email: '', owner: '', lockCalls: 0, locked: false, readsUnderLock: 0, cache: {} };
+  const state = { sid: '', owner: '', lockCalls: 0, locked: false, readsUnderLock: 0, cache: {} };
   const globals = {
     SpreadsheetApp: f.SpreadsheetApp,
-    Session: { getActiveUser: () => ({ getEmail: () => state.email }), getEffectiveUser: () => ({ getEmail: () => state.owner || state.email }) },
+    Session: { getActiveUser: () => ({ getEmail: () => state.sid }), getEffectiveUser: () => ({ getEmail: () => state.owner || state.sid }) },
     LockService: { getScriptLock: () => ({ waitLock: () => { state.lockCalls++; state.locked = true; }, releaseLock: () => { state.locked = false; } }) },
     CacheService: { getScriptCache: () => ({ get: (k) => (k in state.cache ? state.cache[k] : null), put: (k, v) => { state.cache[k] = String(v); }, remove: (k) => { delete state.cache[k]; } }) },
     HtmlService: {
@@ -79,10 +79,11 @@ function loadApp() {
       },
     },
   };
+  globals.Utilities = { getUuid: () => require('crypto').randomUUID() };
   const G = loadGs(['Logic.js', 'Seed.js', 'Store.js', 'Code.js'], globals);
   const ssGet = f.ss.getSheetByName;
   f.ss.getSheetByName = (n) => { const sh = ssGet(n); if (!sh) return sh; const gdr = sh.getDataRange;
     sh.getDataRange = () => { if (state.locked) state.readsUnderLock++; return gdr(); }; return sh; };
-  return { G, ss: f.ss, state, as: (email) => { state.email = email; } };
+  return { G, ss: f.ss, state, as: (sid) => { state.sid = sid; } };
 }
 module.exports.loadApp = loadApp;

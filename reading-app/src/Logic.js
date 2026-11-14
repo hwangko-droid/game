@@ -1,21 +1,19 @@
 /* Logic.js — 순수 함수 (시트·세션에 의존하지 않음) */
 
-var SCHOOL_DOMAIN = 'ai.jbedu.kr';
-
 var HEADERS = {
-  '학생': ['이메일', '이름', '반', '번호', '진로분야', '최초접속일'],
+  '학생': ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키'],
   '도서': ['도서ID', '제목', '저자', '구분', '진로분야', '연결봉우리ID', '한줄소개', '출처'],
-  '독후감': ['독후감ID', '이메일', '도서ID', '감상', '추천대상', '추천이유', '질문', '작성일', '수정일', '숨김'],
-  '댓글': ['댓글ID', '독후감ID', '이메일', '내용', '작성일', '숨김'],
+  '독후감': ['독후감ID', '학생ID', '도서ID', '감상', '추천대상', '추천이유', '질문', '작성일', '수정일', '숨김'],
+  '댓글': ['댓글ID', '독후감ID', '학생ID', '내용', '작성일', '숨김'],
   '설정': ['키', '값']
 };
 
 // 탭별 [객체 키, 변환 종류]
 var FIELDS_ = {
-  '학생': [['email', 's'], ['name', 's'], ['classNo', 'n'], ['number', 'n'], ['career', 's'], ['joinedAt', 's']],
+  '학생': [['sid', 's'], ['name', 's'], ['classNo', 'n'], ['number', 'n'], ['career', 's'], ['joinedAt', 's'], ['token', 's']],
   '도서': [['id', 's'], ['title', 's'], ['author', 's'], ['kind', 's'], ['careers', 'list'], ['peakId', 's'], ['intro', 's'], ['source', 's']],
-  '독후감': [['id', 's'], ['email', 's'], ['bookId', 's'], ['body', 's'], ['recTarget', 's'], ['recReason', 's'], ['question', 's'], ['createdAt', 's'], ['updatedAt', 's'], ['hidden', 'b']],
-  '댓글': [['id', 's'], ['essayId', 's'], ['email', 's'], ['body', 's'], ['createdAt', 's'], ['hidden', 'b']]
+  '독후감': [['id', 's'], ['sid', 's'], ['bookId', 's'], ['body', 's'], ['recTarget', 's'], ['recReason', 's'], ['question', 's'], ['createdAt', 's'], ['updatedAt', 's'], ['hidden', 'b']],
+  '댓글': [['id', 's'], ['essayId', 's'], ['sid', 's'], ['body', 's'], ['createdAt', 's'], ['hidden', 'b']]
 };
 
 function splitList_(v) {
@@ -60,14 +58,14 @@ function newId_(prefix) {
   return prefix + '-' + Date.now().toString(36) + rand + newId_.seq_.toString(36);
 }
 
-function normEmail_(email) {
-  return String(email == null ? '' : email).trim().toLowerCase();
+function normId_(sid) {
+  return String(sid == null ? '' : sid).trim().toLowerCase();
 }
 
-function isSchoolEmail_(email) {
-  var e = normEmail_(email);
-  var at = e.lastIndexOf('@');
-  return at > 0 && e.slice(at + 1) === SCHOOL_DOMAIN;
+// 학생ID = 반-번호(두 자리), 예: 2-07
+function studentId_(classNo, number) {
+  var n = String(Number(number));
+  return Number(classNo) + '-' + (n.length < 2 ? '0' + n : n);
 }
 
 /* ---------- 접근 판정 · 등록 ---------- */
@@ -75,16 +73,13 @@ function isSchoolEmail_(email) {
 function ok_(data) { return { ok: true, data: data }; }
 function fail_(error) { return { ok: false, error: error }; }
 
-function isAdminEmail_(email, settings) {
-  var e = normEmail_(email);
-  return (settings.adminEmails || []).some(function (a) { return normEmail_(a) === e; });
-}
-
-function accessState_(email, student, settings) {
-  if (!isSchoolEmail_(email)) return 'outsider';
-  if (isAdminEmail_(email, settings)) return 'admin';
+// token: 기기에 저장된 접속키, 또는 선생님이 입력한 관리자 비밀번호
+function accessState_(token, student, settings) {
+  var t = String(token == null ? '' : token).trim();
+  var pw = String(settings.adminPassword == null ? '' : settings.adminPassword).trim();
+  if (t && pw && t === pw) return 'admin';
   if (student) return 'student';
-  return settings.entryCodeOn ? 'needsCode' : 'needsProfile';
+  return 'login';
 }
 
 function checkEntryCode_(input, settings) {
@@ -175,13 +170,13 @@ function ctx_(db, viewer) {
     admin: admin,
     essays: essays,
     comments: comments,
-    stu: indexBy_(db.students, function (s) { return normEmail_(s.email); }),
+    stu: indexBy_(db.students, function (s) { return normId_(s.sid); }),
     book: indexBy_(db.books, function (b) { return b.id; })
   };
 }
 
 function essayCard_(c, e) {
-  var s = c.stu[normEmail_(e.email)] || {};
+  var s = c.stu[normId_(e.sid)] || {};
   var b = c.book[e.bookId] || {};
   return {
     id: e.id, bookId: e.bookId, bookTitle: b.title || '', authorName: s.name || '', authorClass: s.classNo || 0,
@@ -191,8 +186,8 @@ function essayCard_(c, e) {
   };
 }
 
-function careerOf_(c, email) {
-  var s = c.stu[normEmail_(email)];
+function careerOf_(c, sid) {
+  var s = c.stu[normId_(sid)];
   return s ? s.career : '';
 }
 
@@ -202,13 +197,13 @@ function careerView_(db, career, viewer) {
     .map(function (s) {
       var titles = [];
       c.essays.forEach(function (e) {
-        if (normEmail_(e.email) !== normEmail_(s.email)) return;
+        if (normId_(e.sid) !== normId_(s.sid)) return;
         var t = (c.book[e.bookId] || {}).title;
         if (t && titles.indexOf(t) < 0) titles.push(t);
       });
       return { name: s.name, classNo: s.classNo, bookTitles: titles };
     });
-  var recent = c.essays.filter(function (e) { return careerOf_(c, e.email) === career; })
+  var recent = c.essays.filter(function (e) { return careerOf_(c, e.sid) === career; })
     .slice().sort(byNewest_).slice(0, 20).map(function (e) { return essayCard_(c, e); });
   return { career: career, friends: friends, recentEssays: recent };
 }
@@ -223,7 +218,7 @@ function bookCards_(db, filter, viewer) {
     var es = c.essays.filter(function (e) { return e.bookId === b.id; }).slice().sort(byNewest_);
     var readers = {}, byCareer = {};
     es.forEach(function (e) {
-      var em = normEmail_(e.email);
+      var em = normId_(e.sid);
       if (readers[em]) return;
       readers[em] = true;
       var cr = careerOf_(c, em);
@@ -258,24 +253,24 @@ function essayDetail_(db, essayId, viewer) {
   var card = essayCard_(c, e);
   card.body = e.body;
   card.updatedAt = e.updatedAt;
-  card.authorEmail = e.email;
+  card.authorSid = e.sid;
   var comments = c.comments.filter(function (x) { return x.essayId === e.id; }).slice().sort(byOldest_)
     .map(function (x) {
-      var s = c.stu[normEmail_(x.email)] || {};
+      var s = c.stu[normId_(x.sid)] || {};
       return { id: x.id, authorName: s.name || '', authorClass: s.classNo || 0, body: x.body, createdAt: x.createdAt, hidden: !!x.hidden };
     });
   return { essay: card, comments: comments };
 }
 
-function myRecords_(db, email) {
-  var me = normEmail_(email);
+function myRecords_(db, sid) {
+  var me = normId_(sid);
   var c = ctx_(db, { isAdmin: false });
-  var mineAll = db.essays.filter(function (e) { return normEmail_(e.email) === me; });
+  var mineAll = db.essays.filter(function (e) { return normId_(e.sid) === me; });
   var essays = mineAll.slice().sort(byNewest_).map(function (e) { return essayCard_(c, e); });
   var mineIds = indexBy_(mineAll, function (e) { return e.id; });
-  var commentsOnMine = c.comments.filter(function (x) { return mineIds[x.essayId] && normEmail_(x.email) !== me; })
+  var commentsOnMine = c.comments.filter(function (x) { return mineIds[x.essayId] && normId_(x.sid) !== me; })
     .slice().sort(byNewest_).map(function (x) {
-      var s = c.stu[normEmail_(x.email)] || {};
+      var s = c.stu[normId_(x.sid)] || {};
       return { essayId: x.essayId, bookTitle: (c.book[mineIds[x.essayId].bookId] || {}).title || '', authorName: s.name || '', body: x.body, createdAt: x.createdAt };
     });
   return { essays: essays, commentsOnMine: commentsOnMine };
@@ -284,11 +279,11 @@ function myRecords_(db, email) {
 function adminSummary_(db) {
   var classes = {};
   db.students.slice().sort(byClassNo_).forEach(function (s) {
-    var em = normEmail_(s.email);
+    var em = normId_(s.sid);
     (classes[s.classNo] = classes[s.classNo] || []).push({
-      name: s.name, number: s.number, email: s.email,
-      essayCount: db.essays.filter(function (e) { return normEmail_(e.email) === em; }).length,
-      commentCount: db.comments.filter(function (x) { return normEmail_(x.email) === em; }).length
+      name: s.name, number: s.number, sid: s.sid,
+      essayCount: db.essays.filter(function (e) { return normId_(e.sid) === em; }).length,
+      commentCount: db.comments.filter(function (x) { return normId_(x.sid) === em; }).length
     });
   });
   return Object.keys(classes).map(Number).sort(function (a, b) { return a - b; })

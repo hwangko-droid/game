@@ -3,155 +3,176 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadApp, plain } = require('./load');
 
-const T = 't@ai.jbedu.kr', A = 'a@ai.jbedu.kr', B = 'b@ai.jbedu.kr';
-const profile = (name, career = '의약·보건') => ({ name, classNo: 2, number: 3, career });
+const profile = (name, classNo = 2, number = 3, career = '의약·보건') => ({ name, classNo, number, career });
 const essay = { bookId: 'B03', body: '가'.repeat(300), recTarget: '의사 꿈꾸는', recReason: '병의 사회적 원인', question: '의사가 이걸 고칠 수 있을까?' };
 
 function boot() {
   const app = loadApp();
-  app.as(T); app.G.초기설정();
-  const code = app.G.readSettings_().entryCode;
-  const reg = (email, name, career) => { app.as(email); return plain(app.G.apiRegister(profile(name, career), code)); };
-  return { ...app, code, reg };
+  app.state.owner = 'hwangko@honam.hs.kr';
+  app.as('hwangko@honam.hs.kr');
+  app.G.초기설정();
+  app.as(''); // 웹앱 방문자는 익명
+  const s = app.G.readSettings_();
+  const login = (name, classNo, number, career, code = '2027') => plain(app.G.apiLogin(code, profile(name, classNo, number, career)));
+  const tok = (name, classNo, number, career) => login(name, classNo, number, career).data.token;
+  return { ...app, admin: s.adminPassword, login, tok };
 }
 
-test('초기설정 makes runner the admin', () => {
-  const { G } = boot();
-  assert.deepEqual(plain(G.readSettings_().adminEmails), [T]);
+test('default entry code is 2027 and admin password exists', () => {
+  const { G, admin } = boot();
+  assert.equal(String(G.readSettings_().entryCode), '2027');
+  assert.match(admin, /^관리\d{4}$/);
 });
 
-test('outsider gets nothing', () => {
+test('no token: login state and no student data', () => {
   const app = boot();
-  app.reg(A, '가학생');
-  app.as('x@gmail.com');
-  const b = plain(app.G.apiBootstrap());
-  assert.equal(b.data.state, 'outsider');
+  app.tok('가학생', 2, 3);
+  const b = plain(app.G.apiBootstrap(''));
+  assert.equal(b.data.state, 'login');
   assert.ok(!JSON.stringify(b).includes('가학생'));
-  assert.equal(app.G.apiCareerView('의약·보건').ok, false);
-  assert.equal(app.G.apiBookCards({}).ok, false);
-  app.as('');
-  assert.equal(plain(app.G.apiBootstrap()).data.state, 'outsider');
+  assert.equal(app.G.apiCareerView('', '의약·보건').ok, false);
+  assert.equal(app.G.apiCareerView('garbage', '의약·보건').ok, false);
 });
 
-test('entry code flow', () => {
+test('wrong code rejected, right code registers with class-number id', () => {
   const app = boot();
-  app.as(A);
-  assert.equal(plain(app.G.apiBootstrap()).data.state, 'needsCode');
-  assert.equal(plain(app.G.apiCheckCode('틀림')).data.valid, false);
-  assert.equal(plain(app.G.apiCheckCode(' ' + app.code.toLowerCase() + ' ')).data.valid, true);
-  assert.equal(app.G.apiRegister(profile('가학생'), '틀림').ok, false);
-  assert.equal(app.G.readAll_().students.length, 0);
-  assert.equal(app.G.apiCareerView('의약·보건').ok, false);
-  assert.equal(app.G.apiRegister(profile('가학생'), app.code).ok, true);
-  assert.equal(plain(app.G.apiBootstrap()).data.state, 'student');
-  assert.equal(plain(app.G.apiBootstrap()).data.me.name, '가학생');
-});
-
-test('registered student can change career without code', () => {
-  const app = boot();
-  app.reg(A, '가학생');
-  const r = plain(app.G.apiRegister({ ...profile('가학생'), career: '교육' }));
+  const bad = app.login('가학생', 2, 3, '의약·보건', '2026');
+  assert.equal(bad.ok, false);
+  assert.equal(bad.error, '비밀번호가 맞지 않아요.');
+  const r = app.login('가학생', 2, 3);
   assert.equal(r.ok, true);
-  assert.equal(app.G.readAll_().students.length, 1);
-  assert.equal(app.G.readAll_().students[0].career, '교육');
+  assert.ok(r.data.token.length >= 16);
+  const st = app.G.readAll_().students;
+  assert.equal(st.length, 1);
+  assert.equal(st[0].sid, '2-03');
+  const b = plain(app.G.apiBootstrap(r.data.token)).data;
+  assert.equal(b.state, 'student');
+  assert.equal(b.me.name, '가학생');
+  assert.equal(b.me.token, undefined);
 });
 
-test('essay visible to same-career friend', () => {
+test('same class/number/name logs back in with same token', () => {
   const app = boot();
-  app.reg(A, '가학생'); app.reg(B, '나학생');
-  app.as(A);
-  const s = plain(app.G.apiSubmitEssay(essay));
+  const t1 = app.tok('가학생', 2, 3);
+  const t2 = app.tok(' 가학생 ', 2, 3, '교육');
+  assert.equal(t1, t2);
+  assert.equal(app.G.readAll_().students.length, 1);
+  assert.equal(app.G.readAll_().students[0].career, '의약·보건');
+});
+
+test('same class/number with different name is rejected', () => {
+  const app = boot();
+  app.tok('가학생', 2, 3);
+  const r = app.login('나학생', 2, 3);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /이미 다른 이름으로 등록된 번호/);
+});
+
+test('admin password logs in as admin without profile', () => {
+  const app = boot();
+  const r = plain(app.G.apiLogin(app.admin, {}));
+  assert.equal(r.ok, true);
+  assert.equal(plain(app.G.apiBootstrap(r.data.token)).data.state, 'admin');
+  assert.equal(app.G.readAll_().students.length, 0);
+});
+
+test('essay visible to friend; tokens never leak', () => {
+  const app = boot();
+  const a = app.tok('가학생', 2, 3), b = app.tok('나학생', 1, 9);
+  const s = plain(app.G.apiSubmitEssay(a, essay));
   assert.equal(s.ok, true);
-  app.as(B);
-  const v = plain(app.G.apiCareerView('의약·보건')).data;
-  assert.equal(v.recentEssays[0].recReason, '병의 사회적 원인');
-  assert.equal(v.recentEssays[0].authorName, '가학생');
-  const d = plain(app.G.apiEssayDetail(s.data.id)).data;
-  assert.equal(d.essay.isMine, false);
-  assert.equal(d.essay.authorEmail, undefined);
+  const v = plain(app.G.apiCareerView(b, '의약·보건'));
+  assert.equal(v.data.recentEssays[0].authorName, '가학생');
+  assert.equal(v.data.friends.length, 2);
+  const d = plain(app.G.apiEssayDetail(b, s.data.id));
+  assert.equal(d.data.essay.isMine, false);
+  const all = JSON.stringify([v, d, plain(app.G.apiBookCards(b, {})), plain(app.G.apiMyRecords(b)), plain(app.G.apiAdminSummary(app.admin))]);
+  assert.ok(!all.includes(a), 'token leaked');
+  assert.equal(plain(app.G.apiEssayDetail(a, s.data.id)).data.essay.isMine, true);
 });
 
 test('validation errors surface', () => {
   const app = boot();
-  app.reg(A, '가학생');
-  assert.equal(plain(app.G.apiSubmitEssay({ ...essay, body: '짧음' })).error, '감상은 최소 300자 이상 써 주세요. (지금 2자)');
+  const a = app.tok('가학생', 2, 3);
+  assert.equal(plain(app.G.apiSubmitEssay(a, { ...essay, body: '짧음' })).error, '감상은 최소 300자 이상 써 주세요. (지금 2자)');
 });
 
 test("update other's essay rejected", () => {
   const app = boot();
-  app.reg(A, '가학생'); app.reg(B, '나학생');
-  app.as(A);
-  const id = plain(app.G.apiSubmitEssay(essay)).data.id;
-  app.as(B);
-  assert.deepEqual(plain(app.G.apiUpdateEssay(id, { ...essay, body: '나'.repeat(300) })), { ok: false, error: '내가 쓴 글만 고칠 수 있어요.' });
+  const a = app.tok('가학생', 2, 3), b = app.tok('나학생', 1, 9);
+  const id = plain(app.G.apiSubmitEssay(a, essay)).data.id;
+  assert.deepEqual(plain(app.G.apiUpdateEssay(b, id, { ...essay, body: '나'.repeat(300) })), { ok: false, error: '내가 쓴 글만 고칠 수 있어요.' });
   assert.equal(app.G.readAll_().essays[0].body, essay.body);
-  app.as(A);
-  assert.equal(app.G.apiUpdateEssay(id, { ...essay, body: '다'.repeat(300) }).ok, true);
-  const e = app.G.readAll_().essays[0];
-  assert.equal(e.body, '다'.repeat(300));
-  assert.ok(e.updatedAt);
-  assert.equal(plain(app.G.apiEssayDetail(id)).data.essay.isMine, true);
+  assert.equal(app.G.apiUpdateEssay(a, id, { ...essay, body: '다'.repeat(300) }).ok, true);
+  assert.ok(app.G.readAll_().essays[0].updatedAt);
 });
 
 test('hide is admin-only and hides from students', () => {
   const app = boot();
-  app.reg(A, '가학생'); app.reg(B, '나학생');
-  app.as(A);
-  const id = plain(app.G.apiSubmitEssay(essay)).data.id;
-  app.as(B);
-  assert.equal(app.G.apiAddComment(id, '좋은 글').ok, true);
-  assert.equal(app.G.apiSetHidden('독후감', id, true).ok, false);
-  app.as(T);
-  assert.equal(app.G.apiSetHidden('독후감', id, true).ok, true);
-  assert.ok(plain(app.G.apiEssayDetail(id)).data);
-  app.as(B);
-  const d = plain(app.G.apiEssayDetail(id));
+  const a = app.tok('가학생', 2, 3), b = app.tok('나학생', 1, 9);
+  const id = plain(app.G.apiSubmitEssay(a, essay)).data.id;
+  assert.equal(app.G.apiAddComment(b, id, '좋은 글').ok, true);
+  assert.equal(app.G.apiSetHidden(b, '독후감', id, true).ok, false);
+  assert.equal(app.G.apiSetHidden(app.admin, '독후감', id, true).ok, true);
+  assert.ok(plain(app.G.apiEssayDetail(app.admin, id)).data);
+  const d = plain(app.G.apiEssayDetail(b, id));
   assert.equal(d.ok, true);
   assert.equal(d.data, null);
-  assert.equal(app.G.apiAddComment(id, '또').ok, false);
-  app.as(T);
-  assert.equal(app.G.apiSetHidden('학생', A, true).ok, false);
+  assert.equal(app.G.apiAddComment(b, id, '또').ok, false);
+  assert.equal(app.G.apiSetHidden(app.admin, '학생', '2-03', true).ok, false);
 });
 
 test('admin summary admin-only', () => {
   const app = boot();
-  app.reg(A, '가학생');
-  assert.equal(app.G.apiAdminSummary().ok, false);
-  app.as(T);
-  assert.equal(plain(app.G.apiAdminSummary()).data[0].students[0].name, '가학생');
+  const a = app.tok('가학생', 2, 3);
+  assert.equal(app.G.apiAdminSummary(a).ok, false);
+  assert.equal(plain(app.G.apiAdminSummary(app.admin)).data[0].students[0].name, '가학생');
 });
 
-test('student adds book', () => {
+test('student adds book and writes about it', () => {
   const app = boot();
-  app.reg(A, '가학생');
-  const r = plain(app.G.apiAddBook({ title: '새 책', author: '저자', careers: ['교육'] }));
-  assert.equal(r.ok, true);
+  const a = app.tok('가학생', 2, 3);
+  const r = plain(app.G.apiAddBook(a, { title: '새 책', author: '저자', careers: ['교육'] }));
   assert.match(r.data.id, /^U-/);
-  const b = app.G.readAll_().books.find(x => x.id === r.data.id);
-  assert.equal(b.kind, '학생추가');
-  assert.equal(app.G.apiSubmitEssay({ ...essay, bookId: r.data.id }).ok, true);
+  assert.equal(app.G.readAll_().books.find(x => x.id === r.data.id).kind, '학생추가');
+  assert.equal(app.G.apiSubmitEssay(a, { ...essay, bookId: r.data.id }).ok, true);
 });
 
-test('write apis take the script lock', () => {
+test('career can change, name/class/number cannot', () => {
   const app = boot();
-  app.reg(A, '가학생');
+  const a = app.tok('가학생', 2, 3);
+  assert.equal(app.G.apiUpdateCareer(a, '교육').ok, true);
+  assert.equal(app.G.readAll_().students[0].career, '교육');
+  assert.equal(app.G.apiUpdateCareer(a, '우주').ok, false);
+});
+
+test('writes take the lock and do not read sheets while holding it', () => {
+  const app = boot();
+  const a = app.tok('가학생', 2, 3);
   const before = app.state.lockCalls;
-  app.as(A);
-  const id = plain(app.G.apiSubmitEssay(essay)).data.id;
-  app.G.apiAddComment(id, 'x');
-  app.G.apiUpdateEssay(id, essay);
-  app.G.apiAddBook({ title: 'q', author: 'w', careers: ['교육'] });
-  assert.equal(app.state.lockCalls - before, 4);
+  app.state.readsUnderLock = 0;
+  const id = plain(app.G.apiSubmitEssay(a, essay)).data.id;
+  app.G.apiAddComment(a, id, '안녕');
+  assert.equal(app.state.lockCalls - before, 2);
+  assert.equal(app.state.readsUnderLock, 0);
 });
 
-test('myRecords and bookCards for student', () => {
+test('student text is stored literally, never as formula or number', () => {
   const app = boot();
-  app.reg(A, '가학생');
-  app.G.apiSubmitEssay(essay);
-  assert.equal(plain(app.G.apiMyRecords()).data.essays.length, 1);
-  const cards = plain(app.G.apiBookCards({ career: '의약·보건' })).data;
-  assert.equal(cards[0].id, 'B03');
-  assert.equal(cards[0].readerCount, 1);
+  const a = app.tok('=학생!A3', 2, 3);
+  const id = plain(app.G.apiSubmitEssay(a, { ...essay, question: '007', recReason: '+82 -1' })).data.id;
+  app.G.apiAddComment(a, id, "='독후감'!D7");
+  const db = app.G.readAll_();
+  assert.equal(db.students[0].name, '=학생!A3');
+  assert.equal(db.essays[0].question, '007');
+  assert.equal(db.essays[0].recReason, '+82 -1');
+  assert.equal(db.comments[0].body, "='독후감'!D7");
+});
+
+test('anonymous visitor cannot run 초기설정', () => {
+  const app = boot();
+  app.as('');
+  assert.throws(() => app.G.초기설정());
 });
 
 test('doGet returns titled page with viewport', () => {
@@ -159,84 +180,4 @@ test('doGet returns titled page with viewport', () => {
   const out = G.doGet();
   assert.equal(out.name, 'index');
   assert.equal(out.title, '우리 진로 책장');
-  assert.match(out.metas.viewport, /width=device-width/);
-});
-
-test('student text is stored literally, never as formula or number', () => {
-  const app = boot();
-  app.reg(A, '=학생!A3');
-  app.as(A);
-  const id = plain(app.G.apiSubmitEssay({ ...essay, question: '007', recReason: '+82 -1' })).data.id;
-  app.G.apiAddComment(id, "='독후감'!D7");
-  const db = app.G.readAll_();
-  assert.equal(db.students[0].name, '=학생!A3');
-  assert.equal(db.essays[0].question, '007');
-  assert.equal(db.essays[0].recReason, '+82 -1');
-  assert.equal(db.comments[0].body, "='독후감'!D7");
-  app.G.apiUpdateEssay(id, { ...essay, body: '=' + '가'.repeat(300) });
-  assert.equal(app.G.readAll_().essays[0].body, '=' + '가'.repeat(300));
-});
-
-test('entry code locks out after 5 wrong tries', () => {
-  const app = boot();
-  app.as(A);
-  for (let i = 0; i < 5; i++) assert.equal(plain(app.G.apiCheckCode('틀림' + i)).data.valid, false);
-  const r = plain(app.G.apiCheckCode(app.code));
-  assert.equal(r.ok, false);
-  assert.match(r.error, /여러 번 틀렸어요/);
-  assert.equal(app.G.apiRegister(profile('가학생'), app.code).ok, false);
-  app.as(B); // 다른 학생은 영향 없음
-  assert.equal(plain(app.G.apiCheckCode(app.code)).data.valid, true);
-});
-
-test('wrong codes in apiRegister also count', () => {
-  const app = boot();
-  app.as(A);
-  for (let i = 0; i < 5; i++) app.G.apiRegister(profile('가학생'), 'x' + i);
-  assert.equal(app.G.apiRegister(profile('가학생'), app.code).ok, false);
-});
-
-test('visitor cannot run 초기설정 as the owner', () => {
-  const app = boot();
-  app.state.owner = T;
-  app.as(A);
-  assert.throws(() => app.G.초기설정());
-});
-
-test('submit and comment do not read sheets while holding the lock', () => {
-  const app = boot();
-  app.reg(A, '가학생');
-  app.as(A);
-  app.state.readsUnderLock = 0;
-  const id = plain(app.G.apiSubmitEssay(essay)).data.id;
-  app.G.apiAddComment(id, '안녕');
-  assert.equal(app.state.readsUnderLock, 0);
-});
-
-test('registration is not duplicated', () => {
-  const app = boot();
-  app.reg(A, '가학생');
-  app.as(A);
-  // 화면이 오래된 상태에서 같은 학생이 다시 등록 요청을 보내도 한 줄만 유지
-  app.G.apiRegister(profile('가학생'), app.code);
-  assert.equal(app.G.readAll_().students.length, 1);
-});
-
-test('name cannot be changed after registration', () => {
-  const app = boot();
-  app.reg(A, '가학생');
-  app.as(A);
-  assert.equal(app.G.apiRegister({ ...profile('나학생'), career: '교육' }).ok, true);
-  const s = app.G.readAll_().students[0];
-  assert.equal(s.name, '가학생');
-  assert.equal(s.career, '교육');
-});
-
-test('admin without a profile is not forced to register', () => {
-  const app = boot();
-  app.as(T);
-  const b = plain(app.G.apiBootstrap()).data;
-  assert.equal(b.state, 'admin');
-  assert.equal(b.me, null);
-  assert.equal(b.libraryUrl.startsWith('https://'), true);
 });

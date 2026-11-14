@@ -87,7 +87,8 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
       var r = google.script.run.withSuccessHandler(function (res) {
         if (res && res.ok) resolve(res.data); else reject(new Error(res && res.error ? res.error : '알 수 없는 오류'));
       }).withFailureHandler(function (e) { reject(new Error('서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.')); });
-      r[name].apply(r, args);
+      // 입장(apiLogin)을 빼고는 모든 요청에 이 기기의 접속키를 함께 보낸다
+      r[name].apply(r, name === 'apiLogin' ? args : [S.token].concat(args));
     });
   }
 
@@ -128,69 +129,54 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
   function load(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
 
   // ---------- 상태 ----------
-  var S = { boot: null, tab: 'career', career: null, code: '', books: null };
+  var TOKEN_KEY = 'readingAppToken';
+  function savedToken() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
+  function saveToken(t) { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+  var S = { token: savedToken(), boot: null, tab: 'career', career: null, books: null };
   var TABS = [['career', '🧭', '우리 진로'], ['books', '📖', '책 찾기'], ['write', '✍️', '독후감 쓰기'], ['mine', '🗂️', '내 기록']];
 
   function start() {
     call('apiBootstrap').then(function (b) {
       S.boot = b;
-      if (b.state === 'outsider') return showOutsider();
-      if (b.state === 'needsCode') return showCode();
-      if (b.state === 'needsProfile') return showProfile();
+      if (b.state === 'login') return showLogin();
       enterApp();
     }).catch(function (e) { show(h('p', { class: 'empty', text: e.message })); });
   }
 
-  function showOutsider() {
-    show(h('div', { class: 'center' },
-      h('h2', { text: '들어올 수 없어요' }),
-      h('p', { text: '이 앱은 호남고 1학년 진로 수업용입니다.' }),
-      h('p', { class: 'meta', text: '학교 계정(@ai.jbedu.kr)으로 로그인했는지 확인해 주세요.' })));
+  function leave() {
+    S.token = ''; saveToken('');
+    S.boot = null; S.career = null;
+    $('who').textContent = ''; $('admin-slot').textContent = '';
+    var nav = $('nav'); nav.textContent = ''; nav.hidden = true;
+    start();
   }
 
-  function showCode() {
-    var err = h('div', { class: 'error', id: 'code-error' });
-    var input = h('input', { id: 'code-input', placeholder: '선생님이 알려 준 입장 코드', autocomplete: 'off' });
-    function submit() {
-      err.textContent = '';
-      call('apiCheckCode', input.value).then(function (r) {
-        if (!r.valid) { err.textContent = '입장 코드가 맞지 않아요. 다시 확인해 주세요.'; return; }
-        S.code = input.value;
-        showProfile();
-      }).catch(function (e) { err.textContent = e.message; });
-    }
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !isComposing(e)) submit(); });
-    show(h('div', { class: 'center' },
-      h('h2', { text: '입장 코드' }),
-      h('p', { class: 'meta', text: '처음 한 번만 입력하면 돼요.' }),
-      input, err,
-      h('button', { class: 'btn', id: 'code-submit', onclick: submit, text: '확인' })));
-  }
-
-  function showProfile(isEdit) {
-    var me = (S.boot && S.boot.me) || {};
-    var careers = S.boot.careers || [];
+  function showLogin() {
+    var careers = (S.boot && S.boot.careers) || [];
     var err = h('div', { class: 'error' });
-    var btn = h('button', { class: 'btn', id: 'profile-submit', text: isEdit ? '저장' : '시작하기' });
-    btn.onclick = function () {
+    var code = h('input', { id: 'login-code', placeholder: '선생님이 알려 준 비밀번호', autocomplete: 'off', inputmode: 'text' });
+    var btn = h('button', { class: 'btn', id: 'login-submit', text: '들어가기' });
+    function submit() {
       err.textContent = ''; btn.disabled = true;
       var p = { name: $('profile-name').value, classNo: $('profile-class').value, number: $('profile-number').value, career: $('profile-career').value };
-      call('apiRegister', p, S.code).then(function () {
-        S.career = null; S.books = null;
+      call('apiLogin', code.value, p).then(function (r) {
+        S.token = r.token; saveToken(r.token);
         return call('apiBootstrap');
-      }).then(function (b) { S.boot = b; enterApp(isEdit ? 'mine' : 'career'); })
+      }).then(function (b) { S.boot = b; enterApp('career'); })
         .catch(function (e) { err.textContent = e.message; btn.disabled = false; });
-    };
+    }
+    btn.onclick = submit;
+    code.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !isComposing(e)) submit(); });
     show(h('div', { class: 'center', style: 'text-align:left' },
-      h('h2', { text: isEdit ? '내 정보 바꾸기' : '나를 소개해 주세요' }),
-      h('p', { class: 'meta', text: '같은 학년 친구들에게 이름과 반, 진로 분야가 보여요.' }),
-      h('label', { for: 'profile-name', text: isEdit ? '이름 (바꿀 일이 있으면 선생님께 말해 주세요)' : '이름' }), h('input', { id: 'profile-name', value: me.name || '', maxlength: 20, disabled: !!isEdit }),
+      h('h2', { text: '우리 진로 책장에 들어가기' }),
+      h('label', { for: 'login-code', text: '비밀번호' }), code,
+      h('label', { for: 'profile-name', text: '이름' }), h('input', { id: 'profile-name', maxlength: 20 }),
       h('div', { class: 'row', style: 'flex-wrap:nowrap' },
-        h('div', { style: 'flex:1' }, h('label', { for: 'profile-class', text: '반' }), h('input', { id: 'profile-class', type: 'number', min: 1, max: 15, value: me.classNo || '' })),
-        h('div', { style: 'flex:1' }, h('label', { for: 'profile-number', text: '번호' }), h('input', { id: 'profile-number', type: 'number', min: 1, max: 40, value: me.number || '' }))),
-      h('label', { for: 'profile-career', text: '진로 분야' }), careerSelect('profile-career', me.career, careers),
-      err, btn,
-      isEdit ? h('button', { class: 'btn ghost', style: 'margin-left:8px', onclick: function () { enterApp('mine'); }, text: '취소' }) : null));
+        h('div', { style: 'flex:1' }, h('label', { for: 'profile-class', text: '반' }), h('input', { id: 'profile-class', type: 'number', min: 1, max: 15 })),
+        h('div', { style: 'flex:1' }, h('label', { for: 'profile-number', text: '번호' }), h('input', { id: 'profile-number', type: 'number', min: 1, max: 40 }))),
+      h('label', { for: 'profile-career', text: '진로 분야 (처음 들어올 때만 정해져요)' }), careerSelect('profile-career', '', careers),
+      h('p', { class: 'meta', text: '같은 학년 친구들에게 이름과 반, 진로 분야가 보여요. 한 번 들어오면 이 기기가 기억해요.' }),
+      err, btn));
   }
 
   // ---------- 앱 ----------
@@ -319,13 +305,15 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
       h('label', { text: '어떤 진로 친구에게 어울릴까요? (여러 개 가능)' }), chips, err, btn);
   }
 
+  function draftKey() { return 'draft:' + ((S.boot && S.boot.me && S.boot.me.sid) || 'admin'); }
+
   // 독후감 쓰기 (arg: {bookId} 또는 {edit: essay})
   function viewWrite(arg) {
     arg = arg || {};
     var edit = arg.edit || null;
     loading();
     call('apiBookCards', {}).then(function (books) {
-      var draft = edit ? null : (load('draft') || {});
+      var draft = edit ? null : (load(draftKey()) || {});
       var bookId = edit ? edit.bookId : (arg.bookId || draft.bookId || '');
       var min = S.boot.minBodyChars || 0;
       var sel = h('select', { id: 'write-book' }, h('option', { value: '', text: '— 책을 골라 주세요 —' }),
@@ -343,7 +331,7 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
         var n = body.value.trim().length;
         count.textContent = n + ' / 최소 ' + min + '자';
         count.classList.toggle('short', n < min);
-        if (!edit) store('draft', data());
+        if (!edit) store(draftKey(), data());
       }
       [sel, body, target, reason, question].forEach(function (el) { el.addEventListener('input', update); el.addEventListener('change', update); });
       update();
@@ -351,7 +339,7 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
         err.textContent = ''; btn.disabled = true;
         var p = edit ? call('apiUpdateEssay', edit.id, data()) : call('apiSubmitEssay', data());
         p.then(function (r) {
-          if (!edit) store('draft', null);
+          if (!edit) store(draftKey(), null);
           toast(edit ? '고쳤어요.' : '독후감을 올렸어요!');
           viewDetail(r.id);
         }).catch(function (e) { err.textContent = e.message; btn.disabled = false; });
@@ -424,15 +412,23 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
       var me = S.boot.me;
       show([
         h('h2', { text: '내 기록' }),
-        me ? h('div', { class: 'card' }, h('b', { text: me.name }), ' ', h('span', { class: 'meta', text: me.classNo + '반 ' + me.number + '번 · ' + me.career }),
-          h('div', { style: 'margin-top:8px' }, h('button', { class: 'btn ghost small', text: '내 정보·진로 바꾸기', onclick: function () { showProfile(true); } }))) : null,
+        me ? h('div', { class: 'card' }, h('b', { text: me.name }), ' ', h('span', { class: 'meta', text: me.classNo + '반 ' + me.number + '번' }),
+          h('label', { for: 'mine-career', text: '내 진로 분야' }),
+          h('div', { class: 'inline' }, careerSelect('mine-career', me.career, S.boot.careers || []),
+            h('button', { class: 'btn small', id: 'mine-career-save', text: '바꾸기', onclick: function () {
+              var c = $('mine-career').value;
+              call('apiUpdateCareer', c).then(function () { me.career = c; S.career = null; toast('진로 분야를 바꿨어요.'); })
+                .catch(function (e) { toast(e.message); });
+            } })),
+          h('p', { class: 'meta', text: '이름·반·번호가 틀렸으면 선생님께 말씀해 주세요.' })) : null,
         h('h3', { text: '내가 쓴 독후감 ' + r.essays.length + '편' }),
         r.essays.length ? r.essays.map(essayCard) : h('p', { class: 'empty', text: '아직 쓴 독후감이 없어요.' }),
         h('h3', { text: '내 글에 달린 댓글' }),
         r.commentsOnMine.length ? r.commentsOnMine.map(function (c) {
           return h('div', { class: 'card click', onclick: function () { viewDetail(c.essayId); } },
             h('div', { class: 'meta', text: '『' + c.bookTitle + '』 · ' + c.authorName + ' · ' + fmtDate(c.createdAt) }), h('div', { text: c.body }));
-        }) : h('p', { class: 'empty', text: '아직 댓글이 없어요.' })
+        }) : h('p', { class: 'empty', text: '아직 댓글이 없어요.' }),
+        h('div', { style: 'margin-top:24px' }, h('button', { class: 'btn ghost small', text: '이 기기에서 나가기', onclick: leave }))
       ]);
     }).catch(failed);
   }

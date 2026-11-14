@@ -5,8 +5,8 @@ const { loadGs, plain } = require('./load');
 const { makeDb } = require('./fixture');
 const L = loadGs(['Logic.js']);
 
-const stu = { email: 'c@ai.jbedu.kr', isAdmin: false };
-const adm = { email: 't@ai.jbedu.kr', isAdmin: true };
+const stu = { sid: 'c@ai.jbedu.kr', isAdmin: false };
+const adm = { sid: 't@ai.jbedu.kr', isAdmin: true };
 const all = (v) => JSON.stringify(v);
 
 test('careerView lists all friends incl. those without essays, ordered by class then number', () => {

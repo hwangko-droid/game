@@ -3,22 +3,20 @@
 // ===== Logic.js =====
 /* Logic.js — 순수 함수 (시트·세션에 의존하지 않음) */
 
-var SCHOOL_DOMAIN = 'ai.jbedu.kr';
-
 var HEADERS = {
-  '학생': ['이메일', '이름', '반', '번호', '진로분야', '최초접속일'],
+  '학생': ['학생ID', '이름', '반', '번호', '진로분야', '최초접속일', '접속키'],
   '도서': ['도서ID', '제목', '저자', '구분', '진로분야', '연결봉우리ID', '한줄소개', '출처'],
-  '독후감': ['독후감ID', '이메일', '도서ID', '감상', '추천대상', '추천이유', '질문', '작성일', '수정일', '숨김'],
-  '댓글': ['댓글ID', '독후감ID', '이메일', '내용', '작성일', '숨김'],
+  '독후감': ['독후감ID', '학생ID', '도서ID', '감상', '추천대상', '추천이유', '질문', '작성일', '수정일', '숨김'],
+  '댓글': ['댓글ID', '독후감ID', '학생ID', '내용', '작성일', '숨김'],
   '설정': ['키', '값']
 };
 
 // 탭별 [객체 키, 변환 종류]
 var FIELDS_ = {
-  '학생': [['email', 's'], ['name', 's'], ['classNo', 'n'], ['number', 'n'], ['career', 's'], ['joinedAt', 's']],
+  '학생': [['sid', 's'], ['name', 's'], ['classNo', 'n'], ['number', 'n'], ['career', 's'], ['joinedAt', 's'], ['token', 's']],
   '도서': [['id', 's'], ['title', 's'], ['author', 's'], ['kind', 's'], ['careers', 'list'], ['peakId', 's'], ['intro', 's'], ['source', 's']],
-  '독후감': [['id', 's'], ['email', 's'], ['bookId', 's'], ['body', 's'], ['recTarget', 's'], ['recReason', 's'], ['question', 's'], ['createdAt', 's'], ['updatedAt', 's'], ['hidden', 'b']],
-  '댓글': [['id', 's'], ['essayId', 's'], ['email', 's'], ['body', 's'], ['createdAt', 's'], ['hidden', 'b']]
+  '독후감': [['id', 's'], ['sid', 's'], ['bookId', 's'], ['body', 's'], ['recTarget', 's'], ['recReason', 's'], ['question', 's'], ['createdAt', 's'], ['updatedAt', 's'], ['hidden', 'b']],
+  '댓글': [['id', 's'], ['essayId', 's'], ['sid', 's'], ['body', 's'], ['createdAt', 's'], ['hidden', 'b']]
 };
 
 function splitList_(v) {
@@ -63,14 +61,14 @@ function newId_(prefix) {
   return prefix + '-' + Date.now().toString(36) + rand + newId_.seq_.toString(36);
 }
 
-function normEmail_(email) {
-  return String(email == null ? '' : email).trim().toLowerCase();
+function normId_(sid) {
+  return String(sid == null ? '' : sid).trim().toLowerCase();
 }
 
-function isSchoolEmail_(email) {
-  var e = normEmail_(email);
-  var at = e.lastIndexOf('@');
-  return at > 0 && e.slice(at + 1) === SCHOOL_DOMAIN;
+// 학생ID = 반-번호(두 자리), 예: 2-07
+function studentId_(classNo, number) {
+  var n = String(Number(number));
+  return Number(classNo) + '-' + (n.length < 2 ? '0' + n : n);
 }
 
 /* ---------- 접근 판정 · 등록 ---------- */
@@ -78,16 +76,13 @@ function isSchoolEmail_(email) {
 function ok_(data) { return { ok: true, data: data }; }
 function fail_(error) { return { ok: false, error: error }; }
 
-function isAdminEmail_(email, settings) {
-  var e = normEmail_(email);
-  return (settings.adminEmails || []).some(function (a) { return normEmail_(a) === e; });
-}
-
-function accessState_(email, student, settings) {
-  if (!isSchoolEmail_(email)) return 'outsider';
-  if (isAdminEmail_(email, settings)) return 'admin';
+// token: 기기에 저장된 접속키, 또는 선생님이 입력한 관리자 비밀번호
+function accessState_(token, student, settings) {
+  var t = String(token == null ? '' : token).trim();
+  var pw = String(settings.adminPassword == null ? '' : settings.adminPassword).trim();
+  if (t && pw && t === pw) return 'admin';
   if (student) return 'student';
-  return settings.entryCodeOn ? 'needsCode' : 'needsProfile';
+  return 'login';
 }
 
 function checkEntryCode_(input, settings) {
@@ -178,13 +173,13 @@ function ctx_(db, viewer) {
     admin: admin,
     essays: essays,
     comments: comments,
-    stu: indexBy_(db.students, function (s) { return normEmail_(s.email); }),
+    stu: indexBy_(db.students, function (s) { return normId_(s.sid); }),
     book: indexBy_(db.books, function (b) { return b.id; })
   };
 }
 
 function essayCard_(c, e) {
-  var s = c.stu[normEmail_(e.email)] || {};
+  var s = c.stu[normId_(e.sid)] || {};
   var b = c.book[e.bookId] || {};
   return {
     id: e.id, bookId: e.bookId, bookTitle: b.title || '', authorName: s.name || '', authorClass: s.classNo || 0,
@@ -194,8 +189,8 @@ function essayCard_(c, e) {
   };
 }
 
-function careerOf_(c, email) {
-  var s = c.stu[normEmail_(email)];
+function careerOf_(c, sid) {
+  var s = c.stu[normId_(sid)];
   return s ? s.career : '';
 }
 
@@ -205,13 +200,13 @@ function careerView_(db, career, viewer) {
     .map(function (s) {
       var titles = [];
       c.essays.forEach(function (e) {
-        if (normEmail_(e.email) !== normEmail_(s.email)) return;
+        if (normId_(e.sid) !== normId_(s.sid)) return;
         var t = (c.book[e.bookId] || {}).title;
         if (t && titles.indexOf(t) < 0) titles.push(t);
       });
       return { name: s.name, classNo: s.classNo, bookTitles: titles };
     });
-  var recent = c.essays.filter(function (e) { return careerOf_(c, e.email) === career; })
+  var recent = c.essays.filter(function (e) { return careerOf_(c, e.sid) === career; })
     .slice().sort(byNewest_).slice(0, 20).map(function (e) { return essayCard_(c, e); });
   return { career: career, friends: friends, recentEssays: recent };
 }
@@ -226,7 +221,7 @@ function bookCards_(db, filter, viewer) {
     var es = c.essays.filter(function (e) { return e.bookId === b.id; }).slice().sort(byNewest_);
     var readers = {}, byCareer = {};
     es.forEach(function (e) {
-      var em = normEmail_(e.email);
+      var em = normId_(e.sid);
       if (readers[em]) return;
       readers[em] = true;
       var cr = careerOf_(c, em);
@@ -261,24 +256,24 @@ function essayDetail_(db, essayId, viewer) {
   var card = essayCard_(c, e);
   card.body = e.body;
   card.updatedAt = e.updatedAt;
-  card.authorEmail = e.email;
+  card.authorSid = e.sid;
   var comments = c.comments.filter(function (x) { return x.essayId === e.id; }).slice().sort(byOldest_)
     .map(function (x) {
-      var s = c.stu[normEmail_(x.email)] || {};
+      var s = c.stu[normId_(x.sid)] || {};
       return { id: x.id, authorName: s.name || '', authorClass: s.classNo || 0, body: x.body, createdAt: x.createdAt, hidden: !!x.hidden };
     });
   return { essay: card, comments: comments };
 }
 
-function myRecords_(db, email) {
-  var me = normEmail_(email);
+function myRecords_(db, sid) {
+  var me = normId_(sid);
   var c = ctx_(db, { isAdmin: false });
-  var mineAll = db.essays.filter(function (e) { return normEmail_(e.email) === me; });
+  var mineAll = db.essays.filter(function (e) { return normId_(e.sid) === me; });
   var essays = mineAll.slice().sort(byNewest_).map(function (e) { return essayCard_(c, e); });
   var mineIds = indexBy_(mineAll, function (e) { return e.id; });
-  var commentsOnMine = c.comments.filter(function (x) { return mineIds[x.essayId] && normEmail_(x.email) !== me; })
+  var commentsOnMine = c.comments.filter(function (x) { return mineIds[x.essayId] && normId_(x.sid) !== me; })
     .slice().sort(byNewest_).map(function (x) {
-      var s = c.stu[normEmail_(x.email)] || {};
+      var s = c.stu[normId_(x.sid)] || {};
       return { essayId: x.essayId, bookTitle: (c.book[mineIds[x.essayId].bookId] || {}).title || '', authorName: s.name || '', body: x.body, createdAt: x.createdAt };
     });
   return { essays: essays, commentsOnMine: commentsOnMine };
@@ -287,11 +282,11 @@ function myRecords_(db, email) {
 function adminSummary_(db) {
   var classes = {};
   db.students.slice().sort(byClassNo_).forEach(function (s) {
-    var em = normEmail_(s.email);
+    var em = normId_(s.sid);
     (classes[s.classNo] = classes[s.classNo] || []).push({
-      name: s.name, number: s.number, email: s.email,
-      essayCount: db.essays.filter(function (e) { return normEmail_(e.email) === em; }).length,
-      commentCount: db.comments.filter(function (x) { return normEmail_(x.email) === em; }).length
+      name: s.name, number: s.number, sid: s.sid,
+      essayCount: db.essays.filter(function (e) { return normId_(e.sid) === em; }).length,
+      commentCount: db.comments.filter(function (x) { return normId_(x.sid) === em; }).length
     });
   });
   return Object.keys(classes).map(Number).sort(function (a, b) { return a - b; })
@@ -308,7 +303,7 @@ var SEED_SETTINGS = {
   '입장코드사용': 'TRUE',
   '입장코드': '2027',        // 선생님이 정한 입장 비밀번호
   '감상최소글자': 300,
-  '관리자이메일': '',        // setupSpreadsheet가 실행자 이메일로 채움
+  '관리자비밀번호': '',      // setupSpreadsheet가 '관리'+4자리로 생성
   '도서관링크': 'https://read365.edunet.net/PureScreen/SchoolSearch?schoolName=%ED%98%B8%EB%82%A8%EA%B3%A0%EB%93%B1%ED%95%99%EA%B5%90&provCode=P10&neisCode=P100000464',
   '학년도': '2026'
 };
@@ -359,7 +354,7 @@ function dataRows_(tab) {
   return values.slice(1).filter(function (r) { return r.some(function (c) { return c !== '' && c != null; }); });
 }
 
-function setupSpreadsheet_(adminEmail) {
+function setupSpreadsheet_() {
   var ss = getSs_();
   TABS_.forEach(function (tab) {
     var sh = ss.getSheetByName(tab);
@@ -376,7 +371,7 @@ function setupSpreadsheet_(adminEmail) {
   Object.keys(SEED_SETTINGS).forEach(function (k) {
     if (have[k]) return;
     var v = SEED_SETTINGS[k];
-    if (k === '관리자이메일') v = adminEmail || '';
+    if (k === '관리자비밀번호') v = '관리' + String(1000 + Math.floor(Math.random() * 9000));
     sh.appendRow([k, v]);
   });
 }
@@ -394,7 +389,7 @@ function readSettings_() {
     entryCodeOn: !isExplicitFalse_(kv['입장코드사용']),  // 분명히 FALSE일 때만 끈다
     entryCode: String(kv['입장코드'] == null ? '' : kv['입장코드']).trim(),
     minBodyChars: kv['감상최소글자'] === '' || kv['감상최소글자'] == null ? 300 : Number(kv['감상최소글자']),
-    adminEmails: splitList_(kv['관리자이메일']),
+    adminPassword: String(kv['관리자비밀번호'] == null ? '' : kv['관리자비밀번호']).trim(),
     libraryUrl: String(kv['도서관링크'] || SEED_SETTINGS['도서관링크']),
     schoolYear: String(kv['학년도'] == null ? '' : kv['학년도'])
   };
@@ -412,9 +407,9 @@ function appendRow_(tab, obj) {
 function updateRowById_(tab, id, patch) {
   var sh = sheet_(tab);
   var values = sh.getDataRange().getValues();
-  var key = tab === '학생' ? normEmail_(id) : String(id);
+  var key = String(id);
   for (var i = 1; i < values.length; i++) {
-    var cell = tab === '학생' ? normEmail_(values[i][0]) : String(values[i][0]);
+    var cell = String(values[i][0]);
     if (cell !== key) continue;
     var obj = rowToObject_(tab, values[i]);
     Object.keys(patch).forEach(function (k) { obj[k] = patch[k]; });
@@ -426,7 +421,10 @@ function updateRowById_(tab, id, patch) {
 }
 
 // ===== Code.js =====
-/* Code.js — 웹앱 진입점과 화면이 부르는 서버 함수(api*) */
+/* Code.js — 웹앱 진입점과 화면이 부르는 서버 함수(api*)
+ * 웹앱은 "실행: 나(선생님) / 액세스: 모든 사용자"로 배포한다. 학생은 구글 로그인 없이
+ * 비밀번호(설정.입장코드)와 반·번호·이름으로 들어오고, 발급받은 접속키(token)를 모든 요청에 보낸다.
+ */
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('index')
@@ -434,32 +432,36 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-// 선생님이 앱스 스크립트 편집기에서 한 번 실행: 시트 탭·기본값을 만들고 실행자를 관리자로 등록
+// 선생님이 앱스 스크립트 편집기에서 한 번 실행: 시트 탭·기본값(입장코드 2027, 관리자비밀번호)을 만든다
 function 초기설정() {
-  var owner = normEmail_(Session.getEffectiveUser().getEmail());
-  if (normEmail_(Session.getActiveUser().getEmail()) !== owner) throw new Error('초기설정은 시트 주인만 실행할 수 있어요.');
-  setupSpreadsheet_(owner);
+  var owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  var active = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  if (!active || active !== owner) throw new Error('초기설정은 시트 주인만 실행할 수 있어요.');
+  setupSpreadsheet_();
 }
 
-function currentUser_() {
-  var email = normEmail_(Session.getActiveUser().getEmail());
+function currentUser_(token) {
+  var t = String(token == null ? '' : token).trim();
   var settings = readSettings_();
   var db = readAll_();
   var student = null;
-  db.students.forEach(function (s) { if (normEmail_(s.email) === email) student = s; });
-  var state = accessState_(email, student, settings);
-  return { email: email, state: state, student: student, settings: settings, isAdmin: state === 'admin', db: db };
+  if (t) db.students.forEach(function (s) { if (s.token && s.token === t) student = s; });
+  var state = accessState_(t, student, settings);
+  return {
+    sid: student ? student.sid : '', state: state, student: student, settings: settings,
+    isAdmin: state === 'admin', db: db
+  };
 }
 
-var ERR_ENTRY_ = '먼저 입장 절차를 마쳐 주세요.';
+var ERR_ENTRY_ = '먼저 입장해 주세요.';
 var ERR_ADMIN_ = '선생님만 할 수 있어요.';
 
 // role: 'any' | 'member' (학생·관리자) | 'admin'
-function run_(role, fn, write) {
+function run_(token, role, fn, write) {
   var lock = null;
   try {
     // 읽기·권한 확인은 잠금 밖에서 한다. 잠금은 실제로 시트에 쓰는 동안만 잡는다.
-    var u = currentUser_();
+    var u = currentUser_(token);
     if (role === 'member' && u.state !== 'student' && u.state !== 'admin') return fail_(ERR_ENTRY_);
     if (role === 'admin' && !u.isAdmin) return fail_(ERR_ADMIN_);
     if (write) { lock = LockService.getScriptLock(); lock.waitLock(10000); }
@@ -472,22 +474,23 @@ function run_(role, fn, write) {
   }
 }
 
-function viewer_(u) { return { email: u.email, isAdmin: u.isAdmin }; }
+function viewer_(u) { return { sid: u.sid, isAdmin: u.isAdmin }; }
 function nowIso_() { return new Date().toISOString(); }
 function bookIdSet_(db) {
   var s = new Set();
   db.books.forEach(function (b) { s.add(b.id); });
   return s;
 }
+// 접속키를 뺀 학생 정보
+function publicStudent_(s) {
+  return s ? { sid: s.sid, name: s.name, classNo: s.classNo, number: s.number, career: s.career } : null;
+}
 
-function apiBootstrap() {
-  return run_('any', function (u) {
-    var member = u.state === 'student' || u.state === 'admin';
-    var out = { state: u.state, isAdmin: u.isAdmin };
-    if (u.state === 'outsider') return out;
-    out.careers = u.settings.careers;
-    if (member || u.state === 'needsProfile') {
-      out.me = u.student;
+function apiBootstrap(token) {
+  return run_(token, 'any', function (u) {
+    var out = { state: u.state, isAdmin: u.isAdmin, careers: u.settings.careers };
+    if (u.state === 'student' || u.state === 'admin') {
+      out.me = publicStudent_(u.student);
       out.libraryUrl = u.settings.libraryUrl;
       out.minBodyChars = u.settings.minBodyChars;
     }
@@ -495,97 +498,86 @@ function apiBootstrap() {
   });
 }
 
-var MAX_CODE_FAILS_ = 5;
-var ERR_CODE_LOCK_ = '입장 코드를 여러 번 틀렸어요. 15분 뒤에 다시 시도해 주세요.';
-
-function codeFails_(email) {
-  return Number(CacheService.getScriptCache().get('codefail:' + email) || 0);
-}
-
-// 코드를 확인하고, 틀리면 실패 횟수를 올린다. 잠겨 있으면 null.
-function tryCode_(u, code) {
-  if (codeFails_(u.email) >= MAX_CODE_FAILS_) return null;
-  var valid = checkEntryCode_(code, u.settings);
-  if (!valid) CacheService.getScriptCache().put('codefail:' + u.email, String(codeFails_(u.email) + 1), 900);
-  return valid;
-}
-
-function apiCheckCode(code) {
-  return run_('any', function (u) {
-    if (u.state === 'outsider') return fail_(ERR_ENTRY_);
-    var valid = tryCode_(u, code);
-    if (valid === null) return fail_(ERR_CODE_LOCK_);
-    return { valid: valid };
-  });
-}
-
-function apiRegister(profile, code) {
-  return run_('any', function (u) {
-    if (u.state === 'outsider') return fail_(ERR_ENTRY_);
-    if (!u.student && u.state !== 'admin') {
-      var valid = tryCode_(u, code);
-      if (valid === null) return fail_(ERR_CODE_LOCK_);
-      if (!valid) return fail_('입장 코드가 맞지 않아요.');
-    }
+// 비밀번호 + 반·번호·이름(+진로)으로 입장. 관리자 비밀번호면 관리자로.
+function apiLogin(code, profile) {
+  return run_('', 'any', function (u) {
+    var pw = String(u.settings.adminPassword || '').trim();
+    if (pw && String(code == null ? '' : code).trim() === pw) return { token: pw, admin: true };
+    if (!checkEntryCode_(code, u.settings)) return fail_('비밀번호가 맞지 않아요.');
     var v = validateProfile_(profile, u.settings);
     if (!v.ok) return v;
-    // 잠금 안에서 다시 확인해 같은 학생이 두 줄로 등록되지 않게 한다
-    var existing = readAll_().students.some(function (s) { return normEmail_(s.email) === u.email; });
+    var sid = studentId_(v.data.classNo, v.data.number);
+    // 잠금 안에서 다시 읽어 같은 번호가 두 줄로 등록되지 않게 한다
+    var existing = readAll_().students.filter(function (s) { return s.sid === sid; })[0];
     if (existing) {
-      // 이름은 등록 후 바꿀 수 없다(다른 친구 이름 사칭 방지). 바꿀 일이 있으면 선생님이 시트에서 고친다.
-      updateRowById_('학생', u.email, { classNo: v.data.classNo, number: v.data.number, career: v.data.career });
-    } else {
-      appendRow_('학생', { email: u.email, name: v.data.name, classNo: v.data.classNo, number: v.data.number, career: v.data.career, joinedAt: nowIso_() });
+      if (String(existing.name).trim() !== v.data.name) {
+        return fail_('이미 다른 이름으로 등록된 번호예요. 반·번호를 확인하고, 맞다면 선생님께 말씀해 주세요.');
+      }
+      return { token: existing.token };
     }
-    return { state: u.isAdmin ? 'admin' : 'student' };
+    var token = Utilities.getUuid();
+    appendRow_('학생', {
+      sid: sid, name: v.data.name, classNo: v.data.classNo, number: v.data.number,
+      career: v.data.career, joinedAt: nowIso_(), token: token
+    });
+    return { token: token };
   }, true);
 }
 
-function apiCareerView(career) {
-  return run_('member', function (u) { return careerView_(u.db, career, viewer_(u)); });
+function apiUpdateCareer(token, career) {
+  return run_(token, 'member', function (u) {
+    if (!u.student) return fail_('학생만 진로를 바꿀 수 있어요.');
+    if ((u.settings.careers || []).indexOf(career) < 0) return fail_('진로 분야를 목록에서 골라 주세요.');
+    updateRowById_('학생', u.sid, { career: career });
+    return { career: career };
+  }, true);
 }
 
-function apiBookCards(filter) {
-  return run_('member', function (u) { return bookCards_(u.db, filter || {}, viewer_(u)); });
+function apiCareerView(token, career) {
+  return run_(token, 'member', function (u) { return careerView_(u.db, career, viewer_(u)); });
 }
 
-function apiEssayDetail(id) {
-  return run_('member', function (u) {
+function apiBookCards(token, filter) {
+  return run_(token, 'member', function (u) { return bookCards_(u.db, filter || {}, viewer_(u)); });
+}
+
+function apiEssayDetail(token, id) {
+  return run_(token, 'member', function (u) {
     var d = essayDetail_(u.db, id, viewer_(u));
     if (!d) return null;
-    d.essay.isMine = normEmail_(d.essay.authorEmail) === u.email;
-    delete d.essay.authorEmail;
+    d.essay.isMine = !!u.sid && d.essay.authorSid === u.sid;
+    delete d.essay.authorSid;
     return d;
   });
 }
 
-function apiMyRecords() {
-  return run_('member', function (u) { return myRecords_(u.db, u.email); });
+function apiMyRecords(token) {
+  return run_(token, 'member', function (u) { return myRecords_(u.db, u.sid); });
 }
 
-function apiAdminSummary() {
-  return run_('admin', function (u) { return adminSummary_(u.db); });
+function apiAdminSummary(token) {
+  return run_(token, 'admin', function (u) { return adminSummary_(u.db); });
 }
 
-function apiSubmitEssay(e) {
-  return run_('member', function (u) {
+function apiSubmitEssay(token, e) {
+  return run_(token, 'member', function (u) {
+    if (!u.student) return fail_('학생으로 입장해야 독후감을 쓸 수 있어요.');
     var v = validateEssay_(e, u.settings, bookIdSet_(u.db));
     if (!v.ok) return v;
-    var now = nowIso_();
     var id = newId_('E');
     appendRow_('독후감', {
-      id: id, email: u.email, bookId: v.data.bookId, body: v.data.body, recTarget: v.data.recTarget,
-      recReason: v.data.recReason, question: v.data.question, createdAt: now, updatedAt: '', hidden: false
+      id: id, sid: u.sid, bookId: v.data.bookId, body: v.data.body, recTarget: v.data.recTarget,
+      recReason: v.data.recReason, question: v.data.question, createdAt: nowIso_(), updatedAt: '', hidden: false
     });
     return { id: id };
   }, true);
 }
 
-function apiUpdateEssay(id, e) {
-  return run_('member', function (u) {
+function apiUpdateEssay(token, id, e) {
+  return run_(token, 'member', function (u) {
     var cur = u.db.essays.filter(function (x) { return x.id === id; })[0];
     if (!cur) return fail_('글을 찾을 수 없어요.');
-    if (normEmail_(cur.email) !== u.email) return fail_('내가 쓴 글만 고칠 수 있어요.');
+    if (!u.sid || cur.sid !== u.sid) return fail_('내가 쓴 글만 고칠 수 있어요.');
     var v = validateEssay_(e, u.settings, bookIdSet_(u.db));
     if (!v.ok) return v;
     updateRowById_('독후감', id, {
@@ -596,23 +588,20 @@ function apiUpdateEssay(id, e) {
   }, true);
 }
 
-function apiAddComment(essayId, body) {
-  return run_('member', function (u) {
-    if (!essayDetail_(u.db, essayId, viewer_(u)) || (!u.isAdmin && isHiddenEssay_(u.db, essayId))) return fail_('댓글을 달 수 없는 글이에요.');
+function apiAddComment(token, essayId, body) {
+  return run_(token, 'member', function (u) {
+    if (!u.student) return fail_('학생으로 입장해야 댓글을 달 수 있어요.');
+    if (!essayDetail_(u.db, essayId, viewer_(u))) return fail_('댓글을 달 수 없는 글이에요.');
     var v = validateComment_(body);
     if (!v.ok) return v;
     var id = newId_('C');
-    appendRow_('댓글', { id: id, essayId: essayId, email: u.email, body: v.data, createdAt: nowIso_(), hidden: false });
+    appendRow_('댓글', { id: id, essayId: essayId, sid: u.sid, body: v.data, createdAt: nowIso_(), hidden: false });
     return { id: id };
   }, true);
 }
 
-function isHiddenEssay_(db, essayId) {
-  return db.essays.some(function (e) { return e.id === essayId && e.hidden; });
-}
-
-function apiAddBook(b) {
-  return run_('member', function (u) {
+function apiAddBook(token, b) {
+  return run_(token, 'member', function (u) {
     var v = validateNewBook_(b, u.settings);
     if (!v.ok) return v;
     var id = newId_('U');
@@ -621,8 +610,8 @@ function apiAddBook(b) {
   }, true);
 }
 
-function apiSetHidden(tab, id, hidden) {
-  return run_('admin', function () {
+function apiSetHidden(token, tab, id, hidden) {
+  return run_(token, 'admin', function () {
     if (tab !== '독후감' && tab !== '댓글') return fail_('숨길 수 없는 항목이에요.');
     if (!updateRowById_(tab, id, { hidden: !!hidden })) return fail_('항목을 찾을 수 없어요.');
     return { id: id, hidden: !!hidden };
