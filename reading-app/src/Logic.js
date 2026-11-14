@@ -145,3 +145,150 @@ function validateNewBook(b, settings) {
   }
   return ok_({ title: title, author: author, careers: careers.slice() });
 }
+
+/* ---------- 화면용 데이터 조립 ---------- */
+
+var KIND_ORDER_ = { '봉우리': 0, '징검다리': 1, '학생추가': 2 };
+
+function kindRank_(k) { return k in KIND_ORDER_ ? KIND_ORDER_[k] : 9; }
+
+function indexBy_(arr, key) {
+  var m = {};
+  arr.forEach(function (x) { m[key(x)] = x; });
+  return m;
+}
+
+function byNewest_(a, b) { return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0; }
+function byOldest_(a, b) { return -byNewest_(a, b); }
+function byClassNo_(a, b) { return a.classNo - b.classNo || a.number - b.number; }
+
+// 뷰어가 볼 수 있는 항목만 남긴 db와 조회용 색인
+function ctx_(db, viewer) {
+  var admin = !!(viewer && viewer.isAdmin);
+  var essays = db.essays.filter(function (e) { return admin || !e.hidden; });
+  var comments = db.comments.filter(function (c) { return admin || !c.hidden; });
+  var visibleEssayIds = indexBy_(essays, function (e) { return e.id; });
+  comments = comments.filter(function (c) { return visibleEssayIds[c.essayId]; });
+  return {
+    admin: admin,
+    essays: essays,
+    comments: comments,
+    stu: indexBy_(db.students, function (s) { return normEmail_(s.email); }),
+    book: indexBy_(db.books, function (b) { return b.id; })
+  };
+}
+
+function essayCard_(c, e) {
+  var s = c.stu[normEmail_(e.email)] || {};
+  var b = c.book[e.bookId] || {};
+  return {
+    id: e.id, bookId: e.bookId, bookTitle: b.title || '', authorName: s.name || '', authorClass: s.classNo || 0,
+    career: s.career || '', recTarget: e.recTarget, recReason: e.recReason, question: e.question,
+    createdAt: e.createdAt, hidden: !!e.hidden,
+    commentCount: c.comments.filter(function (x) { return x.essayId === e.id; }).length
+  };
+}
+
+function careerOf_(c, email) {
+  var s = c.stu[normEmail_(email)];
+  return s ? s.career : '';
+}
+
+function careerView(db, career, viewer) {
+  var c = ctx_(db, viewer);
+  var friends = db.students.filter(function (s) { return s.career === career; }).slice().sort(byClassNo_)
+    .map(function (s) {
+      var titles = [];
+      c.essays.forEach(function (e) {
+        if (normEmail_(e.email) !== normEmail_(s.email)) return;
+        var t = (c.book[e.bookId] || {}).title;
+        if (t && titles.indexOf(t) < 0) titles.push(t);
+      });
+      return { name: s.name, classNo: s.classNo, bookTitles: titles };
+    });
+  var recent = c.essays.filter(function (e) { return careerOf_(c, e.email) === career; })
+    .slice().sort(byNewest_).slice(0, 20).map(function (e) { return essayCard_(c, e); });
+  return { career: career, friends: friends, recentEssays: recent };
+}
+
+function squash_(s) { return String(s || '').replace(/\s+/g, '').toLowerCase(); }
+
+function bookCards(db, filter, viewer) {
+  filter = filter || {};
+  var c = ctx_(db, viewer);
+  var q = squash_(filter.q);
+  var cards = db.books.map(function (b) {
+    var es = c.essays.filter(function (e) { return e.bookId === b.id; }).slice().sort(byNewest_);
+    var readers = {}, byCareer = {};
+    es.forEach(function (e) {
+      var em = normEmail_(e.email);
+      if (readers[em]) return;
+      readers[em] = true;
+      var cr = careerOf_(c, em);
+      if (cr) byCareer[cr] = (byCareer[cr] || 0) + 1;
+    });
+    var peak = b.peakId && c.book[b.peakId] ? { id: b.peakId, title: c.book[b.peakId].title } : null;
+    var bridges = db.books.filter(function (x) { return x.peakId === b.id; }).map(function (x) { return { id: x.id, title: x.title }; });
+    return {
+      id: b.id, title: b.title, author: b.author, kind: b.kind, careers: b.careers.slice(), peakId: b.peakId,
+      intro: b.intro, source: b.source,
+      readerCount: Object.keys(readers).length, readersByCareer: byCareer,
+      topReason: es.length ? essayCard_(c, es[0]) : null, peak: peak, bridges: bridges
+    };
+  });
+  if (filter.career) {
+    cards = cards.filter(function (k) { return k.careers.indexOf(filter.career) >= 0 || k.readersByCareer[filter.career]; });
+  }
+  if (q) {
+    cards = cards.filter(function (k) { return squash_(k.title).indexOf(q) >= 0 || squash_(k.author).indexOf(q) >= 0; });
+  }
+  return cards.sort(function (a, b) {
+    return b.readerCount - a.readerCount ||
+      kindRank_(a.kind) - kindRank_(b.kind) ||
+      String(a.title).localeCompare(String(b.title), 'ko');
+  });
+}
+
+function essayDetail(db, essayId, viewer) {
+  var c = ctx_(db, viewer);
+  var e = c.essays.filter(function (x) { return x.id === essayId; })[0];
+  if (!e) return null;
+  var card = essayCard_(c, e);
+  card.body = e.body;
+  card.updatedAt = e.updatedAt;
+  card.authorEmail = e.email;
+  var comments = c.comments.filter(function (x) { return x.essayId === e.id; }).slice().sort(byOldest_)
+    .map(function (x) {
+      var s = c.stu[normEmail_(x.email)] || {};
+      return { id: x.id, authorName: s.name || '', authorClass: s.classNo || 0, body: x.body, createdAt: x.createdAt, hidden: !!x.hidden };
+    });
+  return { essay: card, comments: comments };
+}
+
+function myRecords(db, email) {
+  var me = normEmail_(email);
+  var c = ctx_(db, { isAdmin: false });
+  var mineAll = db.essays.filter(function (e) { return normEmail_(e.email) === me; });
+  var essays = mineAll.slice().sort(byNewest_).map(function (e) { return essayCard_(c, e); });
+  var mineIds = indexBy_(mineAll, function (e) { return e.id; });
+  var commentsOnMine = c.comments.filter(function (x) { return mineIds[x.essayId] && normEmail_(x.email) !== me; })
+    .slice().sort(byNewest_).map(function (x) {
+      var s = c.stu[normEmail_(x.email)] || {};
+      return { essayId: x.essayId, bookTitle: (c.book[mineIds[x.essayId].bookId] || {}).title || '', authorName: s.name || '', body: x.body, createdAt: x.createdAt };
+    });
+  return { essays: essays, commentsOnMine: commentsOnMine };
+}
+
+function adminSummary(db) {
+  var classes = {};
+  db.students.slice().sort(byClassNo_).forEach(function (s) {
+    var em = normEmail_(s.email);
+    (classes[s.classNo] = classes[s.classNo] || []).push({
+      name: s.name, number: s.number, email: s.email,
+      essayCount: db.essays.filter(function (e) { return normEmail_(e.email) === em; }).length,
+      commentCount: db.comments.filter(function (x) { return normEmail_(x.email) === em; }).length
+    });
+  });
+  return Object.keys(classes).map(Number).sort(function (a, b) { return a - b; })
+    .map(function (k) { return { classNo: k, students: classes[k] }; });
+}
