@@ -79,3 +79,13 @@ test('seed books consistent', () => {
   assert.equal(G.SEED_BOOKS.length, 22);
   assert.equal(G.SEED_BOOKS.filter(b => b.source === '서울대 권장도서 100선').length, 9);
 });
+
+test('entry code setting fails closed', () => {
+  const { G, ss } = setup();
+  G.setupSpreadsheet_('t@ai.jbedu.kr');
+  const row = ss._sheets['설정'].find(r => r[0] === '입장코드사용');
+  for (const [v, want] of [['', true], ['켜짐', true], ['ON', true], ['TRUE', true], ['FALSE', false], ['false', false], [false, false], [' False ', false], ['끄기', true]]) {
+    row[1] = v;
+    assert.equal(G.readSettings_().entryCodeOn, want, JSON.stringify(v));
+  }
+});

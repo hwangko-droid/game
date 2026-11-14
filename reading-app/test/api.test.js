@@ -176,3 +176,67 @@ test('student text is stored literally, never as formula or number', () => {
   app.G.apiUpdateEssay(id, { ...essay, body: '=' + '가'.repeat(300) });
   assert.equal(app.G.readAll_().essays[0].body, '=' + '가'.repeat(300));
 });
+
+test('entry code locks out after 5 wrong tries', () => {
+  const app = boot();
+  app.as(A);
+  for (let i = 0; i < 5; i++) assert.equal(plain(app.G.apiCheckCode('틀림' + i)).data.valid, false);
+  const r = plain(app.G.apiCheckCode(app.code));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /여러 번 틀렸어요/);
+  assert.equal(app.G.apiRegister(profile('가학생'), app.code).ok, false);
+  app.as(B); // 다른 학생은 영향 없음
+  assert.equal(plain(app.G.apiCheckCode(app.code)).data.valid, true);
+});
+
+test('wrong codes in apiRegister also count', () => {
+  const app = boot();
+  app.as(A);
+  for (let i = 0; i < 5; i++) app.G.apiRegister(profile('가학생'), 'x' + i);
+  assert.equal(app.G.apiRegister(profile('가학생'), app.code).ok, false);
+});
+
+test('visitor cannot run 초기설정 as the owner', () => {
+  const app = boot();
+  app.state.owner = T;
+  app.as(A);
+  assert.throws(() => app.G.초기설정());
+});
+
+test('submit and comment do not read sheets while holding the lock', () => {
+  const app = boot();
+  app.reg(A, '가학생');
+  app.as(A);
+  app.state.readsUnderLock = 0;
+  const id = plain(app.G.apiSubmitEssay(essay)).data.id;
+  app.G.apiAddComment(id, '안녕');
+  assert.equal(app.state.readsUnderLock, 0);
+});
+
+test('registration is not duplicated', () => {
+  const app = boot();
+  app.reg(A, '가학생');
+  app.as(A);
+  // 화면이 오래된 상태에서 같은 학생이 다시 등록 요청을 보내도 한 줄만 유지
+  app.G.apiRegister(profile('가학생'), app.code);
+  assert.equal(app.G.readAll_().students.length, 1);
+});
+
+test('name cannot be changed after registration', () => {
+  const app = boot();
+  app.reg(A, '가학생');
+  app.as(A);
+  assert.equal(app.G.apiRegister({ ...profile('나학생'), career: '교육' }).ok, true);
+  const s = app.G.readAll_().students[0];
+  assert.equal(s.name, '가학생');
+  assert.equal(s.career, '교육');
+});
+
+test('admin without a profile is not forced to register', () => {
+  const app = boot();
+  app.as(T);
+  const b = plain(app.G.apiBootstrap()).data;
+  assert.equal(b.state, 'admin');
+  assert.equal(b.me, null);
+  assert.equal(b.libraryUrl.startsWith('https://'), true);
+});

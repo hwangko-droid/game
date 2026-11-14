@@ -112,6 +112,8 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
     el.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
   }
   function $(id) { return document.getElementById(id); }
+  // 한글 조합 중 Enter는 글자 확정용이므로 무시한다
+  function isComposing(e) { return e.isComposing || e.keyCode === 229; }
   function show(node) { var v = $('view'); v.textContent = ''; add(v, node); window.scrollTo(0, 0); }
   function toast(msg) {
     var t = h('div', { class: 'toast', text: msg });
@@ -134,7 +136,7 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
       S.boot = b;
       if (b.state === 'outsider') return showOutsider();
       if (b.state === 'needsCode') return showCode();
-      if (b.state === 'needsProfile' || (b.state === 'admin' && !b.me)) return showProfile();
+      if (b.state === 'needsProfile') return showProfile();
       enterApp();
     }).catch(function (e) { show(h('p', { class: 'empty', text: e.message })); });
   }
@@ -157,7 +159,7 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
         showProfile();
       }).catch(function (e) { err.textContent = e.message; });
     }
-    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !isComposing(e)) submit(); });
     show(h('div', { class: 'center' },
       h('h2', { text: '입장 코드' }),
       h('p', { class: 'meta', text: '처음 한 번만 입력하면 돼요.' }),
@@ -182,7 +184,7 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
     show(h('div', { class: 'center', style: 'text-align:left' },
       h('h2', { text: isEdit ? '내 정보 바꾸기' : '나를 소개해 주세요' }),
       h('p', { class: 'meta', text: '같은 학년 친구들에게 이름과 반, 진로 분야가 보여요.' }),
-      h('label', { for: 'profile-name', text: '이름' }), h('input', { id: 'profile-name', value: me.name || '', maxlength: 20 }),
+      h('label', { for: 'profile-name', text: isEdit ? '이름 (바꿀 일이 있으면 선생님께 말해 주세요)' : '이름' }), h('input', { id: 'profile-name', value: me.name || '', maxlength: 20, disabled: !!isEdit }),
       h('div', { class: 'row', style: 'flex-wrap:nowrap' },
         h('div', { style: 'flex:1' }, h('label', { for: 'profile-class', text: '반' }), h('input', { id: 'profile-class', type: 'number', min: 1, max: 15, value: me.classNo || '' })),
         h('div', { style: 'flex:1' }, h('label', { for: 'profile-number', text: '번호' }), h('input', { id: 'profile-number', type: 'number', min: 1, max: 40, value: me.number || '' }))),
@@ -374,11 +376,18 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
       var e = d.essay, isAdmin = S.boot.isAdmin;
       var input = h('input', { id: 'comment-input', maxlength: 500, placeholder: '실명으로 댓글을 남겨요' });
       var err = h('div', { class: 'error' });
+      var sendBtn = h('button', { class: 'btn small', id: 'comment-send', text: '남기기' });
+      var sending = false;
       function send() {
+        if (sending) return;
+        sending = true; input.disabled = true; sendBtn.disabled = true;
         err.textContent = '';
-        call('apiAddComment', e.id, input.value).then(function () { viewDetail(e.id); }).catch(function (x) { err.textContent = x.message; });
+        call('apiAddComment', e.id, input.value).then(function () { viewDetail(e.id); }).catch(function (x) {
+          err.textContent = x.message; sending = false; input.disabled = false; sendBtn.disabled = false;
+        });
       }
-      input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') send(); });
+      sendBtn.onclick = send;
+      input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !isComposing(ev)) send(); });
       function hideBtn(tab, itemId, hidden) {
         return isAdmin ? h('button', { class: 'btn ghost small', text: hidden ? '보이기' : '숨기기', onclick: function () {
           call('apiSetHidden', tab, itemId, !hidden).then(function () { viewDetail(e.id); }).catch(function (x) { toast(x.message); });
@@ -402,7 +411,7 @@ details summary { cursor: pointer; color: var(--accent); margin: 8px 0; }
             h('div', { class: 'meta' }, c.hidden ? h('span', { class: 'badge hidden', text: '숨김' }) : null, c.authorName + ' (' + c.authorClass + '반) · ' + fmtDate(c.createdAt)),
             h('div', { class: 'body-text', text: c.body }), hideBtn('댓글', c.id, c.hidden));
         }),
-        h('div', { class: 'inline', style: 'margin-top:12px' }, input, h('button', { class: 'btn small', onclick: send, text: '남기기' })),
+        h('div', { class: 'inline', style: 'margin-top:12px' }, input, sendBtn),
         err
       ]);
     }).catch(failed);

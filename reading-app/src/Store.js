@@ -38,13 +38,17 @@ function setupSpreadsheet_(adminEmail) {
   });
 }
 
+function isExplicitFalse_(v) {
+  return v === false || String(v == null ? '' : v).trim().toUpperCase() === 'FALSE';
+}
+
 function readSettings_() {
   var kv = {};
   dataRows_('설정').forEach(function (r) { kv[String(r[0]).trim()] = r[1]; });
   var careers = splitList_(kv['진로분야목록']);
   return {
     careers: careers.length ? careers : SEED_CAREERS.slice(),
-    entryCodeOn: kv['입장코드사용'] === undefined ? true : toBool_(kv['입장코드사용']),
+    entryCodeOn: !isExplicitFalse_(kv['입장코드사용']),  // 분명히 FALSE일 때만 끈다
     entryCode: String(kv['입장코드'] == null ? '' : kv['입장코드']).trim(),
     minBodyChars: kv['감상최소글자'] === '' || kv['감상최소글자'] == null ? 300 : Number(kv['감상최소글자']),
     adminEmails: splitList_(kv['관리자이메일']),

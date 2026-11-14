@@ -22,7 +22,8 @@ function installFake(scenario) {
     readerCount: 1, readersByCareer: { '의약·보건': 1 }, topReason: card, peak: { id: 'P03', title: '침묵의 봄' }, bridges: [] };
   const api = {
     apiBootstrap: () => ({ ok: true, data: st.state === 'outsider' ? { state: 'outsider', isAdmin: false }
-      : { state: st.state, isAdmin: false, careers: ['의약·보건', '교육'], me: st.state === 'student' ? me : null, libraryUrl: st.lib, minBodyChars: 300 } }),
+      : { state: st.state, isAdmin: st.state === 'admin', careers: ['의약·보건', '교육'], me: st.state === 'student' ? me : null, libraryUrl: st.lib, minBodyChars: 300 } }),
+    apiAdminSummary: () => ({ ok: true, data: [] }),
     apiCheckCode: (c) => ({ ok: true, data: { valid: c === 'HN1' } }),
     apiRegister: (p, c) => { if (c !== 'HN1') return { ok: false, error: '입장 코드가 맞지 않아요.' }; st.state = 'student'; return { ok: true, data: { state: 'student' } }; },
     apiCareerView: (c) => ({ ok: true, data: { career: c, friends: [{ name: '가학생', classNo: 2, bookTitles: ['아픔이 길이 되려면'] }], recentEssays: [card] } }),
@@ -31,6 +32,7 @@ function installFake(scenario) {
     apiMyRecords: () => ({ ok: true, data: { essays: [], commentsOnMine: [] } }),
     apiSubmitEssay: () => ({ ok: false, error: st.submitError || '감상은 최소 300자 이상 써 주세요. (지금 299자)' }),
     apiAddComment: () => ({ ok: true, data: { id: 'C1' } }),
+    apiSetHidden: () => ({ ok: true, data: {} }),
     apiAddBook: () => ({ ok: true, data: { id: 'U-1' } }),
   };
   function runner(ok, fail) {
@@ -39,7 +41,7 @@ function installFake(scenario) {
         if (name === 'withSuccessHandler') return (f) => runner(f, fail);
         if (name === 'withFailureHandler') return (f) => runner(ok, f);
         return (...args) => { window.__calls.push([name, args]); setTimeout(() => {
-          try { ok && ok(api[name](...args)); } catch (e) { fail && fail(e); } }, 5); };
+          try { ok && ok(api[name](...args)); } catch (e) { fail && fail(e); } }, st.delay || 5); };
       },
     });
   }
@@ -134,3 +136,33 @@ for (const width of [360, 768]) {
     await p.close();
   });
 }
+
+test('Hangul IME Enter and double click post one comment', async () => {
+  const p = await open({ state: 'student', delay: 200 });
+  await p.locator('.essay-card').first().click();
+  await p.fill('#comment-input', '좋은 글이에요');
+  await p.dispatchEvent('#comment-input', 'keydown', { key: 'Enter', isComposing: true, keyCode: 229 });
+  await p.waitForTimeout(50);
+  assert.equal(await p.evaluate(() => window.__calls.filter(c => c[0] === 'apiAddComment').length), 0);
+  await p.press('#comment-input', 'Enter');
+  await p.locator('#comment-send').click({ force: true }).catch(() => {});
+  await p.waitForTimeout(50);
+  assert.equal(await p.evaluate(() => window.__calls.filter(c => c[0] === 'apiAddComment').length), 1);
+  await p.close();
+});
+
+test('admin without profile goes straight to the app', async () => {
+  const p = await open({ state: 'admin' });
+  await p.locator('#admin-btn').waitFor();
+  assert.equal(await p.locator('#profile-submit').count(), 0);
+  await p.locator('nav button[data-tab="career"]').waitFor();
+  await p.close();
+});
+
+test('name is read-only when editing profile', async () => {
+  const p = await open({ state: 'student' });
+  await p.click('nav button[data-tab="mine"]');
+  await p.getByText('내 정보·진로 바꾸기').click();
+  assert.equal(await p.locator('#profile-name').isDisabled(), true);
+  await p.close();
+});
